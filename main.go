@@ -1,15 +1,19 @@
 package main
 
 import (
+	"encoding/binary"
 	"fmt"
 	"github.com/gordonklaus/portaudio"
 	"github.com/rakyll/portmidi"
 	"math"
+	"os"
 	"time"
 )
 
 const sampleRate = 44100
 const polyphony = 16
+
+var f *os.File
 
 func (oscs Oscs) noteOn(which int64, vel int64) {
 	for i, osc := range oscs {
@@ -85,6 +89,7 @@ func (oscs Oscs) processAudio(out [][]float32) {
 			}
 		}
 	}
+	chk(binary.Write(f, binary.BigEndian, out[0]))
 }
 
 func main() {
@@ -94,8 +99,20 @@ func main() {
 	in, err := portmidi.NewInputStream(portmidi.GetDefaultInputDeviceId(), 1024)
 	chk(err)
 
+	if in == nil {
+
+	}
+
 	portaudio.Initialize()
 	defer portaudio.Terminate()
+
+	f, err = os.Create("/tmp/recording.f32")
+	// # to play:
+	// $ play -x -r 44100 -c 1 /tmp/recording.f32
+	// # to convert to wav:
+	// $ sox -x -r 44100 -c 1 /tmp/recording.f32 recording.wav
+
+	chk(err)
 
 	oscs := Oscs(make([]Osc, polyphony))
 	s, err := portaudio.OpenDefaultStream(0, 2, float64(sampleRate), 0, oscs.processAudio)
@@ -122,10 +139,10 @@ func (g *stereoSine) signal() float64 {
 		g.vol = g.amp*0.1 + g.vol*0.9
 	}
 	amp := g.vol
-	v := tern(g.phase < 0.2, -amp, amp)
+	v := amp * math.Sin(2*math.Pi*g.phase)
 
-	//      v += 0.5 * tern(g.phase2 < 0.5, -amp, amp)
-	v += 0.5 * amp * g.phase2
+	//	v += 0.5 * tern(g.phase2 < 0.5, -amp, amp)
+	v += amp * math.Sin(2*math.Pi*g.phase2)
 	_, g.phase = math.Modf(g.phase + g.step)
 	_, g.phase2 = math.Modf(g.phase2 + g.step2)
 	return v
