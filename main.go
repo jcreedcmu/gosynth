@@ -38,6 +38,9 @@ func (oscs Oscs) noteOn(which int64, vel int64) {
 }
 
 func (oscs Oscs) noteOff(which int64) {
+	mutex.Lock()
+	defer mutex.Unlock()
+
 	for _, osc := range oscs {
 		if osc != nil && osc.getParam("pitch").(int64) == which {
 			osc.setParam("on", false)
@@ -46,10 +49,14 @@ func (oscs Oscs) noteOff(which int64) {
 }
 
 func (oscs Oscs) pedalOn() {
+	mutex.Lock()
+	defer mutex.Unlock()
 
 }
 
 func (oscs Oscs) pedalOff() {
+	mutex.Lock()
+	defer mutex.Unlock()
 
 }
 
