@@ -209,8 +209,8 @@ func (g *Sqr) setParam(name string, val interface{}) {
 		g.cur = pitch
 		freq := (440 * math.Pow(2, float64(pitch-69)/12))
 		g.step = freq / sampleRate
-		freq2 := (881 * math.Pow(2, float64(pitch-69)/12))
-		g.step2 = (freq2 + 0.1) / sampleRate
+		freq2 := (884 * math.Pow(2, float64(pitch-69)/12))
+		g.step2 = (freq2 + 0.3) / sampleRate
 	case "vol":
 		g.vol = val.(float64)
 	}
