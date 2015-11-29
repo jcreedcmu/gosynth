@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/binary"
+	"flag"
 	"fmt"
 	"github.com/gordonklaus/portaudio"
 	"github.com/rakyll/portmidi"
@@ -89,10 +90,15 @@ func (oscs Oscs) processAudio(out [][]float32) {
 			}
 		}
 	}
-	chk(binary.Write(f, binary.BigEndian, out[0]))
+	if f != nil {
+		chk(binary.Write(f, binary.BigEndian, out[0]))
+	}
 }
 
 func main() {
+	shouldRecord := flag.Bool("record", false, "whether to record")
+	flag.Parse()
+
 	portmidi.Initialize()
 	defer portmidi.Terminate()
 
@@ -106,13 +112,15 @@ func main() {
 	portaudio.Initialize()
 	defer portaudio.Terminate()
 
-	f, err = os.Create("/tmp/recording.f32")
-	// # to play:
-	// $ play -x -r 44100 -c 1 /tmp/recording.f32
-	// # to convert to wav:
-	// $ sox -x -r 44100 -c 1 /tmp/recording.f32 recording.wav
+	if *shouldRecord {
+		f, err = os.Create("/tmp/recording.f32")
+		// # to play:
+		// $ play -x -r 44100 -c 1 /tmp/recording.f32
+		// # to convert to wav:
+		// $ sox -x -r 44100 -c 1 /tmp/recording.f32 recording.wav
 
-	chk(err)
+		chk(err)
+	}
 
 	oscs := Oscs(make([]Osc, polyphony))
 	s, err := portaudio.OpenDefaultStream(0, 2, float64(sampleRate), 0, oscs.processAudio)
