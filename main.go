@@ -8,6 +8,7 @@ import (
 	"github.com/rakyll/portmidi"
 	"math"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -15,8 +16,12 @@ const sampleRate = 44100
 const polyphony = 64
 
 var f *os.File
+var mutex = &sync.Mutex{}
 
 func (oscs Oscs) noteOn(which int64, vel int64) {
+	mutex.Lock()
+	defer mutex.Unlock()
+
 	for i, osc := range oscs {
 		if osc == nil ||
 			(osc.getParam("vol").(float64) < 0.001 &&
@@ -79,6 +84,9 @@ func listenMidi(in *portmidi.Stream, oscs Oscs) {
 type Oscs []Osc
 
 func (oscs Oscs) processAudio(out [][]float32) {
+	mutex.Lock()
+	defer mutex.Unlock()
+
 	for i := range out[0] {
 		out[0][i] = 0
 		out[1][i] = 0
@@ -217,8 +225,8 @@ func (g *LowPass) getParam(name string) interface{} {
 }
 
 func (g *LowPass) signal() float64 {
-	g.buf = 0.99*g.buf + 0.01*g.input.signal()
-	return 10 * g.buf
+	g.buf = 0.999*g.buf + 0.001*g.input.signal()
+	return 100 * g.buf
 }
 
 // Utils
