@@ -105,10 +105,6 @@ func main() {
 	in, err := portmidi.NewInputStream(portmidi.GetDefaultInputDeviceId(), 1024)
 	chk(err)
 
-	if in == nil {
-
-	}
-
 	portaudio.Initialize()
 	defer portaudio.Terminate()
 
@@ -141,6 +137,7 @@ type Osc interface {
 }
 
 func (g *Sqr) signal() float64 {
+	g.t++
 	if !g.on {
 		g.vol *= 0.9995
 	} else {
@@ -149,6 +146,7 @@ func (g *Sqr) signal() float64 {
 	amp := g.vol
 	//v := amp * math.Sin(2*math.Pi*g.phase)
 
+	amp *= math.Exp(-0.00001 * float64(g.t))
 	v := 1.0 * tern(g.phase < 0.5, -amp, amp)
 	v += 0.5 * tern(g.phase2 < 0.5, -amp, amp)
 	//v += amp * math.Sin(2*math.Pi*g.phase2)
@@ -160,6 +158,7 @@ func (g *Sqr) signal() float64 {
 // Basic tone generator
 
 type Sqr struct {
+	t      int64
 	step   float64
 	phase  float64
 	step2  float64
