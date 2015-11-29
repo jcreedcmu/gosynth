@@ -11,16 +11,16 @@ import (
 )
 
 const sampleRate = 44100
-const polyphony = 16
+const polyphony = 64
 
 var f *os.File
 
 func (oscs Oscs) noteOn(which int64, vel int64) {
 	for i, osc := range oscs {
-		if osc == nil || osc.getParam("pitch").(int64) == which ||
-			(osc.getParam("vol").(float64) < 0.01 &&
+		if osc == nil ||
+			(osc.getParam("vol").(float64) < 0.001 &&
 				!osc.getParam("on").(bool)) {
-			oscs[i] = &stereoSine{amp: 0.05 / 127 * float64(vel)}
+			oscs[i] = NewLowPass(&Sqr{amp: 0.05 / 127 * float64(vel)})
 			osc = oscs[i]
 			osc.setParam("on", true)
 			osc.setParam("pitch", which)
@@ -132,23 +132,26 @@ type Osc interface {
 	getParam(string) interface{}
 }
 
-func (g *stereoSine) signal() float64 {
+func (g *Sqr) signal() float64 {
 	if !g.on {
 		g.vol *= 0.9995
 	} else {
 		g.vol = g.amp*0.1 + g.vol*0.9
 	}
 	amp := g.vol
-	v := amp * math.Sin(2*math.Pi*g.phase)
+	//v := amp * math.Sin(2*math.Pi*g.phase)
 
-	//	v += 0.5 * tern(g.phase2 < 0.5, -amp, amp)
-	v += amp * math.Sin(2*math.Pi*g.phase2)
+	v := 1.0 * tern(g.phase < 0.5, -amp, amp)
+	v += 0.5 * tern(g.phase2 < 0.5, -amp, amp)
+	//v += amp * math.Sin(2*math.Pi*g.phase2)
 	_, g.phase = math.Modf(g.phase + g.step)
 	_, g.phase2 = math.Modf(g.phase2 + g.step2)
 	return v
 }
 
-type stereoSine struct {
+// Basic tone generator
+
+type Sqr struct {
 	step   float64
 	phase  float64
 	step2  float64
@@ -159,23 +162,23 @@ type stereoSine struct {
 	cur    int64
 }
 
-func (g *stereoSine) setParam(name string, val interface{}) {
+func (g *Sqr) setParam(name string, val interface{}) {
 	switch name {
 	case "on":
 		g.on = val.(bool)
 	case "pitch":
 		pitch := val.(int64)
 		g.cur = pitch
-		freq := (300 * math.Pow(2, float64(pitch-69)/12))
+		freq := (440 * math.Pow(2, float64(pitch-69)/12))
 		g.step = freq / sampleRate
-		freq2 := (605 * math.Pow(2, float64(pitch-69)/12))
+		freq2 := (881 * math.Pow(2, float64(pitch-69)/12))
 		g.step2 = (freq2 + 0.1) / sampleRate
 	case "vol":
 		g.vol = val.(float64)
 	}
 }
 
-func (g *stereoSine) getParam(name string) interface{} {
+func (g *Sqr) getParam(name string) interface{} {
 	switch name {
 	case "pitch":
 		return g.cur
@@ -187,6 +190,31 @@ func (g *stereoSine) getParam(name string) interface{} {
 	return nil
 }
 
+// Simple low-pass
+
+type LowPass struct {
+	buf   float64
+	input Osc
+}
+
+func NewLowPass(input Osc) *LowPass {
+	return &LowPass{buf: 0, input: input}
+}
+
+func (g *LowPass) setParam(name string, val interface{}) {
+	g.input.setParam(name, val)
+}
+
+func (g *LowPass) getParam(name string) interface{} {
+	return g.input.getParam(name)
+}
+
+func (g *LowPass) signal() float64 {
+	g.buf = 0.99*g.buf + 0.01*g.input.signal()
+	return 10 * g.buf
+}
+
+// Utils
 func tern(cond bool, x float64, y float64) float64 {
 	if cond {
 		return x
