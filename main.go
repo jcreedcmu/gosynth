@@ -17,6 +17,7 @@ const polyphony = 64
 
 var f *os.File
 var mutex = &sync.Mutex{}
+var pedal = false
 
 func (oscs Oscs) noteOn(which int64, vel int64) {
 	mutex.Lock()
@@ -43,7 +44,12 @@ func (oscs Oscs) noteOff(which int64) {
 
 	for _, osc := range oscs {
 		if osc != nil && osc.getParam("pitch").(int64) == which {
-			osc.setParam("on", false)
+			if osc.getParam("on").(bool) {
+				osc.setParam("on", false)
+				if pedal {
+					osc.setParam("pedal_on", true)
+				}
+			}
 		}
 	}
 }
@@ -51,13 +57,19 @@ func (oscs Oscs) noteOff(which int64) {
 func (oscs Oscs) pedalOn() {
 	mutex.Lock()
 	defer mutex.Unlock()
-
+	pedal = true
 }
 
 func (oscs Oscs) pedalOff() {
 	mutex.Lock()
 	defer mutex.Unlock()
 
+	pedal = false
+	for _, osc := range oscs {
+		if osc != nil {
+			osc.setParam("pedal_on", false)
+		}
+	}
 }
 
 func listenMidi(in *portmidi.Stream, oscs Oscs) {
@@ -153,10 +165,11 @@ type Osc interface {
 
 func (g *Sqr) signal() float64 {
 	g.t++
-	if !g.on {
-		g.vol *= 0.9995
-	} else {
+	on := g.on || g.pedal_on
+	if on {
 		g.vol = g.amp*0.1 + g.vol*0.9
+	} else {
+		g.vol *= 0.9995
 	}
 	amp := g.vol
 	//v := amp * math.Sin(2*math.Pi*g.phase)
@@ -173,21 +186,24 @@ func (g *Sqr) signal() float64 {
 // Basic tone generator
 
 type Sqr struct {
-	t      int64
-	step   float64
-	phase  float64
-	step2  float64
-	phase2 float64
-	amp    float64
-	vol    float64
-	on     bool
-	cur    int64
+	t        int64
+	step     float64
+	phase    float64
+	step2    float64
+	phase2   float64
+	amp      float64
+	vol      float64
+	on       bool
+	pedal_on bool
+	cur      int64
 }
 
 func (g *Sqr) setParam(name string, val interface{}) {
 	switch name {
 	case "on":
 		g.on = val.(bool)
+	case "pedal_on":
+		g.pedal_on = val.(bool)
 	case "pitch":
 		pitch := val.(int64)
 		g.cur = pitch
@@ -208,6 +224,8 @@ func (g *Sqr) getParam(name string) interface{} {
 		return g.vol
 	case "on":
 		return g.on
+	case "pedal_on":
+		return g.pedal_on
 	}
 	return nil
 }
