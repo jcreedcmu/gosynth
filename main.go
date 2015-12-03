@@ -19,39 +19,46 @@ var f *os.File
 var mutex = &sync.Mutex{}
 var pedal = false
 
-func (oscs Oscs) noteOn(which int64, vel int64) {
+func (oscs Oscs) noteOn(which int, vel int64) {
 	mutex.Lock()
 	defer mutex.Unlock()
 
-	for i, osc := range oscs {
-		if osc == nil ||
-			(osc.getParam("vol").(float64) < 0.001 &&
-				!osc.getParam("on").(bool)) {
-			oscs[i] = NewLowPass(&Sqr{amp: 0.05 / 127 * float64(vel)})
-			osc = oscs[i]
-			osc.setParam("on", true)
-			osc.setParam("pitch", which)
-			osc.setParam("vol", 0.0)
-			return
-		}
+	osc, ok := oscs[which]
+	if ok {
+		osc.setParam("on", true)
+		osc.setParam("vol", 0.0)
+		osc.setParam("t", 0)
+
+	} else {
+		osc := NewLowPass(&Sqr{amp: 0.05 / 127 * float64(vel)})
+		osc.setParam("on", true)
+		osc.setParam("pitch", which)
+		osc.setParam("vol", 0.0)
+		oscs[which] = osc
 	}
-	fmt.Printf("Can't allocate note\n")
 }
 
-func (oscs Oscs) noteOff(which int64) {
+func (oscs Oscs) noteOff(which int) {
 	mutex.Lock()
 	defer mutex.Unlock()
 
-	for _, osc := range oscs {
-		if osc != nil && osc.getParam("pitch").(int64) == which {
-			if osc.getParam("on").(bool) {
-				osc.setParam("on", false)
-				if pedal {
-					osc.setParam("pedal_on", true)
-				}
+	osc, ok := oscs[which]
+	if ok {
+		if osc.getParam("on").(bool) {
+			osc.setParam("on", false)
+			if pedal {
+				osc.setParam("pedal_on", true)
 			}
 		}
 	}
+
+	for i, osc := range oscs {
+		if osc.getParam("vol").(float64) < 0.001 &&
+			!osc.getParam("on").(bool) {
+			delete(oscs, i)
+		}
+	}
+	fmt.Printf("%d\n", len(oscs))
 }
 
 func (oscs Oscs) pedalOn() {
@@ -81,12 +88,12 @@ func listenMidi(in *portmidi.Stream, oscs Oscs) {
 			switch {
 			case ev.Status >= 0x90 && ev.Status < 0xa0:
 				if ev.Data2 != 0 {
-					oscs.noteOn(ev.Data1, ev.Data2)
+					oscs.noteOn(int(ev.Data1), ev.Data2)
 				} else {
-					oscs.noteOff(ev.Data1)
+					oscs.noteOff(int(ev.Data1))
 				}
 			case ev.Status >= 0x80 && ev.Status < 0x90:
-				oscs.noteOff(ev.Data1)
+				oscs.noteOff(int(ev.Data1))
 			case ev.Status == 0xb0:
 				if ev.Data2 == 0 {
 					oscs.pedalOff()
@@ -100,7 +107,7 @@ func listenMidi(in *portmidi.Stream, oscs Oscs) {
 	}
 }
 
-type Oscs []Osc
+type Oscs map[int]Osc
 
 func (oscs Oscs) processAudio(out [][]float32) {
 	mutex.Lock()
@@ -145,7 +152,7 @@ func main() {
 		chk(err)
 	}
 
-	oscs := Oscs(make([]Osc, polyphony))
+	oscs := Oscs(make(map[int]Osc))
 	s, err := portaudio.OpenDefaultStream(0, 2, float64(sampleRate), 0, oscs.processAudio)
 	chk(err)
 	defer s.Close()
@@ -175,9 +182,15 @@ func (g *Sqr) signal() float64 {
 	//v := amp * math.Sin(2*math.Pi*g.phase)
 
 	amp *= math.Exp(-0.00001 * float64(g.t))
+
+	var ATTACK float64 = 1500
+	if float64(g.t) < ATTACK {
+		amp *= 1.7 + (ATTACK-float64(g.t))/ATTACK
+	}
+
 	v := 0.6 * tern(g.phase < 0.5, -amp, amp)
-	v += 0.2 * tern(g.phase2 < 0.5, -amp, amp)
-	//v += amp * math.Sin(2*math.Pi*g.phase2)
+	//	v += 0.2 * tern(g.phase2 < 0.5, -amp, amp)
+	v += 0.5 * amp * math.Sin(2*math.Pi*g.phase2)
 	_, g.phase = math.Modf(g.phase + g.step)
 	_, g.phase2 = math.Modf(g.phase2 + g.step2)
 	return v
@@ -195,21 +208,23 @@ type Sqr struct {
 	vol      float64
 	on       bool
 	pedal_on bool
-	cur      int64
+	cur      int
 }
 
 func (g *Sqr) setParam(name string, val interface{}) {
 	switch name {
+	case "t":
+		g.t = int64(val.(int))
 	case "on":
 		g.on = val.(bool)
 	case "pedal_on":
 		g.pedal_on = val.(bool)
 	case "pitch":
-		pitch := val.(int64)
+		pitch := val.(int)
 		g.cur = pitch
 		freq := (440 * math.Pow(2, float64(pitch-69)/12))
 		g.step = freq / sampleRate
-		freq2 := (884 * math.Pow(2, float64(pitch-69)/12))
+		freq2 := (880 * math.Pow(2, float64(pitch-69)/12))
 		g.step2 = (freq2 + 0.3) / sampleRate
 	case "vol":
 		g.vol = val.(float64)
