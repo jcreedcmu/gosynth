@@ -175,8 +175,8 @@ func (g *Sqr) signal() float64 {
 	//v := amp * math.Sin(2*math.Pi*g.phase)
 
 	amp *= math.Exp(-0.00001 * float64(g.t))
-	v := 1.0 * tern(g.phase < 0.5, -amp, amp)
-	v += 0.5 * tern(g.phase2 < 0.5, -amp, amp)
+	v := 0.6 * tern(g.phase < 0.5, -amp, amp)
+	v += 0.2 * tern(g.phase2 < 0.5, -amp, amp)
 	//v += amp * math.Sin(2*math.Pi*g.phase2)
 	_, g.phase = math.Modf(g.phase + g.step)
 	_, g.phase2 = math.Modf(g.phase2 + g.step2)
@@ -250,8 +250,8 @@ func (g *LowPass) getParam(name string) interface{} {
 }
 
 func (g *LowPass) signal() float64 {
-	g.buf = 0.999*g.buf + 0.001*g.input.signal()
-	return 100 * g.buf
+	g.buf = 0.99*g.buf + 0.01*g.input.signal()
+	return 10 * g.buf
 }
 
 // Utils
