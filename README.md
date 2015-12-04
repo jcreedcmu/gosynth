@@ -8,7 +8,7 @@ To run:
 ```shell
 export GOPATH=~/go # or something similar, wherever you want it
 go get github.com/gordonklaus/portaudio
-go github.com/rakyll/portmidi
+go get github.com/rakyll/portmidi
 go run main.go
 ```
 
