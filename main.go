@@ -129,6 +129,21 @@ func (oscs Oscs) processAudio(out [][]float32) {
 	}
 }
 
+func openStream(cbk interface{}) (*portaudio.Stream, error) {
+	outDev, err := portaudio.DefaultOutputDevice()
+	if err != nil {
+		return nil, err
+	}
+
+	p := portaudio.LowLatencyParameters(nil, outDev)
+
+	p.Input.Channels = 0
+	p.Output.Channels = 2
+	p.SampleRate = sampleRate
+	p.FramesPerBuffer = 0
+	return portaudio.OpenStream(p, cbk)
+}
+
 func main() {
 	shouldRecord := flag.Bool("record", false, "whether to record")
 	flag.Parse()
@@ -153,7 +168,10 @@ func main() {
 	}
 
 	oscs := Oscs(make(map[int]Osc))
-	s, err := portaudio.OpenDefaultStream(0, 2, float64(sampleRate), 0, oscs.processAudio)
+	//	s, err := portaudio.OpenDefaultStream(0, 2, float64(sampleRate), 0, oscs.processAudio)
+
+	s, err := openStream(oscs.processAudio)
+	fmt.Println("%+v\n", s.Info())
 	chk(err)
 	defer s.Close()
 
@@ -176,21 +194,21 @@ func (g *Sqr) signal() float64 {
 	if on {
 		g.vol = g.amp*0.1 + g.vol*0.9
 	} else {
-		g.vol *= 0.9995
+		g.vol *= 0.9997
 	}
 	amp := g.vol
 	//v := amp * math.Sin(2*math.Pi*g.phase)
 
 	amp *= math.Exp(-0.00001 * float64(g.t))
 
-	var ATTACK float64 = 1500
+	var ATTACK float64 = 3000
 	if float64(g.t) < ATTACK {
-		amp *= 1.7 + (ATTACK-float64(g.t))/ATTACK
+		amp *= 1 + (ATTACK-float64(g.t))/ATTACK
 	}
 
-	v := 0.6 * tern(g.phase < 0.5, -amp, amp)
+	v := 0.6 * amp * saw(g.phase)
 	//	v += 0.2 * tern(g.phase2 < 0.5, -amp, amp)
-	v += 0.5 * amp * math.Sin(2*math.Pi*g.phase2)
+	v += 0.8 * amp * saw(g.phase2)
 	_, g.phase = math.Modf(g.phase + g.step)
 	_, g.phase2 = math.Modf(g.phase2 + g.step2)
 	return v
@@ -265,8 +283,17 @@ func (g *LowPass) getParam(name string) interface{} {
 }
 
 func (g *LowPass) signal() float64 {
-	g.buf = 0.99*g.buf + 0.01*g.input.signal()
-	return 10 * g.buf
+	g.buf = 0.999*g.buf + 0.001*g.input.signal()
+	val := 500 * g.buf
+	sign := 1.0
+	abs := math.Abs(val)
+	if val < 0.0 {
+		sign = -1.0
+	}
+	if abs > 0.1 {
+		abs = 0.0 + 0.3*(1.0-1.0/(1.0+abs-0.1))
+	}
+	return sign * abs
 }
 
 // Utils
@@ -276,6 +303,20 @@ func tern(cond bool, x float64, y float64) float64 {
 	} else {
 		return y
 	}
+}
+
+func sqr(x float64) float64 {
+	if x < 0.5 {
+		return 1
+	}
+	return -1
+}
+
+func saw(x float64) float64 {
+	if x < 0.5 {
+		return 4*x - 1
+	}
+	return 3 - 4*x
 }
 
 func chk(err error) {
