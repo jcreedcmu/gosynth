@@ -7,6 +7,7 @@ import (
 	"github.com/gordonklaus/portaudio"
 	"github.com/rakyll/portmidi"
 	"math"
+	"math/rand"
 	"os"
 	"sync"
 	"time"
@@ -15,7 +16,7 @@ import (
 const sampleRate = 44100
 const master_vol = 0.1
 const attack = 100
-const decay = 1000
+const decay = 10000
 const sustain = 0.5
 const release = 10000
 const sustain_decay_rate = 0.00001
@@ -124,6 +125,16 @@ var deleteMe map[int]Unit
 var inner time.Duration
 var innerCount int64
 
+var percOdom int
+var percs Oscs = Oscs(make(map[int]Osc))
+
+func playDrum() {
+	percOdom++
+	percs[percOdom] = &Drum{
+		amp: 1.0,
+	}
+}
+
 func processAudio(out [][]float32) {
 	mutex.Lock()
 	defer mutex.Unlock()
@@ -133,10 +144,10 @@ func processAudio(out [][]float32) {
 	for i := range out[0] {
 		w := float32(0)
 		for _, osc := range oscs {
-			if osc != nil {
-				v := osc.signal()
-				w += float32(v)
-			}
+			w += float32(osc.signal())
+		}
+		for _, osc := range percs {
+			w += float32(osc.signal())
 		}
 		out[0][i] = w
 		out[1][i] = w
@@ -171,16 +182,11 @@ func main() {
 	shouldRecord := flag.Bool("record", false, "whether to record")
 	flag.Parse()
 
-	portmidi.Initialize()
-	defer portmidi.Terminate()
-
-	in, err := portmidi.NewInputStream(portmidi.GetDefaultInputDeviceId(), 1024)
-	chk(err)
-
 	portaudio.Initialize()
 	defer portaudio.Terminate()
 
 	if *shouldRecord {
+		var err error
 		f, err = os.Create("/tmp/recording.f32")
 		// # to play:
 		// $ play -x -r 44100 -c 1 /tmp/recording.f32
@@ -198,7 +204,18 @@ func main() {
 	chk(err)
 	defer s.Close()
 
-	go listenMidi(in, oscs)
+	if false {
+		portmidi.Initialize()
+		in, err := portmidi.NewInputStream(portmidi.GetDefaultInputDeviceId(), 1024)
+		chk(err)
+		go listenMidi(in, oscs)
+		defer portmidi.Terminate()
+	}
+
+	go func() {
+		time.Sleep(1 * time.Second)
+		playDrum()
+	}()
 
 	go func() {
 		for {
@@ -221,17 +238,6 @@ type Osc interface {
 	getParam(string) interface{}
 }
 
-func (g *Sqr) signal() float64 {
-	amp := master_vol * g.env()
-	g.t++
-
-	v := 0.6 * amp * sqr(g.phase)
-	v += 0.8 * amp * saw(g.phase2)
-	_, g.phase = math.Modf(g.phase + g.step)
-	_, g.phase2 = math.Modf(g.phase2 + g.step2)
-	return v
-}
-
 // Basic tone generator
 
 type Sqr struct {
@@ -245,6 +251,17 @@ type Sqr struct {
 	on         bool
 	pedal_hold bool
 	cur        int
+}
+
+func (g *Sqr) signal() float64 {
+	amp := master_vol * g.env()
+	g.t++
+
+	v := 0.6 * amp * sqr(g.phase)
+	v += 0.8 * amp * saw(g.phase2)
+	_, g.phase = math.Modf(g.phase + g.step)
+	_, g.phase2 = math.Modf(g.phase2 + g.step2)
+	return v
 }
 
 func (g *Sqr) setParam(name string, val interface{}) {
@@ -348,6 +365,83 @@ func (g *LowPass) signal() float64 {
 
 func (g *LowPass) env() float64 {
 	return g.input.env()
+}
+
+// Drum
+
+type Drum struct {
+	t          int64
+	step       float64
+	phase      float64
+	step2      float64
+	phase2     float64
+	amp        float64
+	savedEnv   float64
+	on         bool
+	pedal_hold bool
+	cur        int
+}
+
+func (g *Drum) signal() float64 {
+	amp := master_vol * g.env()
+	g.t++
+
+	v := amp * 2 * (rand.Float64() - 0.5)
+	return v
+}
+
+func (g *Drum) setParam(name string, val interface{}) {
+	switch name {
+	case "t":
+		g.t = int64(val.(int))
+	case "on":
+		g.on = val.(bool)
+	case "pedal_hold":
+		g.pedal_hold = val.(bool)
+	case "pitch":
+		pitch := val.(int)
+		g.cur = pitch
+		freq := (440 * math.Pow(2, float64(pitch-69)/12))
+		g.step = freq / sampleRate
+		freq2 := (880 * math.Pow(2, float64(pitch-69)/12))
+		g.step2 = (freq2 + 0.3) / sampleRate
+	case "amp":
+		g.amp = val.(float64)
+	case "savedEnv":
+		g.savedEnv = val.(float64)
+	default:
+		panic(fmt.Errorf("unknown param %s", name))
+	}
+}
+
+func (g *Drum) getParam(name string) interface{} {
+	switch name {
+	case "pitch":
+		return g.cur
+	case "on":
+		return g.on
+	case "pedal_hold":
+		return g.pedal_hold
+	}
+	return nil
+}
+
+func (g *Drum) env() float64 {
+	t := g.t
+
+	if t < attack {
+		phase := float64(t) / attack
+		return (1.0-phase)*0 + phase*g.amp
+	}
+	pat := float64(t) - attack
+	if pat < decay {
+		phase := pat / decay
+		return (1.0-phase)*g.amp + phase*0.0
+	}
+	if _, ok := percs[g.cur]; ok {
+		delete(percs, g.cur)
+	}
+	return 0.0
 }
 
 // Utils
