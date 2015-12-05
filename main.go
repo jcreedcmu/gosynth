@@ -7,6 +7,7 @@ import (
 	"github.com/gordonklaus/portaudio"
 	"github.com/rakyll/portmidi"
 	"math"
+	"math/rand"
 	"os"
 	"sync"
 	"time"
@@ -126,21 +127,29 @@ func listenMidi(in *portmidi.Stream, oscs Oscs) {
 
 type Oscs map[int]Osc
 
+func filter(buf []float32) {
+	for i := range buf {
+		buf[i] *= (rand.Float32() - 0.5) * 2.0
+	}
+}
+
 func (oscs Oscs) processAudio(out [][]float32) {
 	mutex.Lock()
 	defer mutex.Unlock()
 
 	for i := range out[0] {
-		out[0][i] = 0
-		out[1][i] = 0
+		w := float32(0.0)
 		for _, osc := range oscs {
 			if osc != nil {
 				v := osc.signal()
-				out[0][i] += float32(v)
-				out[1][i] += float32(v)
+				w += float32(v)
 			}
 		}
+		out[0][i] = w
+		out[1][i] = w
 	}
+
+	filter(out[0])
 	if f != nil {
 		chk(binary.Write(f, binary.BigEndian, out[0]))
 	}
@@ -244,9 +253,9 @@ func (g *Sqr) setParam(name string, val interface{}) {
 	case "pitch":
 		pitch := val.(int)
 		g.cur = pitch
-		freq := (440 * math.Pow(2, float64(pitch-69)/12))
+		freq := (440 * math.Pow(2, float64(pitch-70)/12))
 		g.step = freq / sampleRate
-		freq2 := (880 * math.Pow(2, float64(pitch-69)/12))
+		freq2 := (881 * math.Pow(2, float64(pitch-70)/12))
 		g.step2 = (freq2 + 0.3) / sampleRate
 	case "vol":
 		g.vol = val.(float64)
@@ -328,8 +337,8 @@ func (g *LowPass) signal() float64 {
 	// }
 	now := sign * abs
 
-	g.buf = 0.99*g.buf + 0.01*now
-	return 10 * g.buf
+	g.buf = 0.9*g.buf + 0.1*now
+	return 5 * g.buf
 }
 
 func (g *LowPass) env() float64 {
