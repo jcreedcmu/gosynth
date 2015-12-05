@@ -173,10 +173,14 @@ var innerCount int64
 var percOdom int
 var percs Oscs = Oscs(make(map[int]Osc))
 
-func playDrum(amp float64) {
+var drumBuf []float64
+
+func playDrum(freq int, amp float64) {
 	percOdom++
 	drum := &Drum{
-		amp: 0.3 * amp,
+		freq: freq,
+		buf:  drumBuf,
+		amp:  0.3 * amp,
 		Envelope: Envelope{
 			Attack:  1000,
 			Decay:   10000,
@@ -240,6 +244,15 @@ func main() {
 	shouldRecord := flag.Bool("record", false, "whether to record")
 	flag.Parse()
 
+	drumBuf = make([]float64, 40000)
+	for i := range drumBuf {
+		if i%30 == 0 {
+			drumBuf[i] = rand.Float64()*2 - 1
+		} else {
+			drumBuf[i] = drumBuf[i-1]
+		}
+	}
+
 	portaudio.Initialize()
 	defer portaudio.Terminate()
 
@@ -271,10 +284,16 @@ func main() {
 
 	go func() {
 		for {
-			playDrum(1.0)
-			time.Sleep(400 * time.Millisecond)
-			playDrum(0.5)
-			time.Sleep(400 * time.Millisecond)
+			playDrum(1, 1.0)
+			time.Sleep(700 * time.Millisecond)
+			playDrum(103, 1.0)
+			time.Sleep(700 * time.Millisecond)
+			playDrum(1, 1.0)
+			time.Sleep(350 * time.Millisecond)
+			playDrum(2, 0.7)
+			time.Sleep(350 * time.Millisecond)
+			playDrum(103, 1.0)
+			time.Sleep(700 * time.Millisecond)
 		}
 	}()
 
@@ -323,7 +342,7 @@ func (g *Sqr) signal() (float64, bool) {
 	amp := g.amp * master_vol * env
 	g.t++
 
-	v := 0.6 * amp * sqr(g.phase)
+	v := 0.6 * amp * saw(g.phase)
 	v += 0.8 * amp * saw(g.phase2)
 	_, g.phase = math.Modf(g.phase + g.step)
 	_, g.phase2 = math.Modf(g.phase2 + g.step2)
@@ -369,7 +388,10 @@ func (g *Sqr) getParam(name string) interface{} {
 // Drum
 
 type Drum struct {
-	amp float64
+	freq int
+	t    int
+	amp  float64
+	buf  []float64
 	Envelope
 }
 
@@ -377,7 +399,11 @@ func (g *Drum) signal() (float64, bool) {
 	env, kill := g.getEnv()
 	amp := master_vol * env
 
-	v := g.amp * amp * 2 * (rand.Float64() - 0.5)
+	v := g.amp * amp * g.buf[g.t]
+	g.t += g.freq
+	if g.t >= len(g.buf) {
+		g.t -= len(g.buf)
+	}
 	return v, kill
 }
 
