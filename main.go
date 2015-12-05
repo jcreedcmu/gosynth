@@ -131,15 +131,16 @@ func processAudio(out [][]float32) {
 	start := time.Now()
 
 	for i := range out[0] {
-		out[0][i] = 0
-		out[1][i] = 0
+		w := float32(0)
 		for _, osc := range oscs {
 			if osc != nil {
 				v := osc.signal()
-				out[0][i] += float32(v)
-				out[1][i] += float32(v)
+				w += float32(v)
+
 			}
 		}
+		out[0][i] = w
+		out[1][i] = w
 	}
 	if f != nil {
 		chk(binary.Write(f, binary.BigEndian, out[0]))
@@ -238,7 +239,6 @@ type Sqr struct {
 	step2      float64
 	phase2     float64
 	amp        float64
-	vol        float64
 	savedEnv   float64
 	on         bool
 	pedal_hold bool
@@ -260,8 +260,6 @@ func (g *Sqr) setParam(name string, val interface{}) {
 		g.step = freq / sampleRate
 		freq2 := (880 * math.Pow(2, float64(pitch-69)/12))
 		g.step2 = (freq2 + 0.3) / sampleRate
-	case "vol":
-		g.vol = val.(float64)
 	case "amp":
 		g.amp = val.(float64)
 	case "savedEnv":
@@ -275,8 +273,6 @@ func (g *Sqr) getParam(name string) interface{} {
 	switch name {
 	case "pitch":
 		return g.cur
-	case "vol":
-		return g.vol
 	case "on":
 		return g.on
 	case "pedal_hold":
@@ -330,6 +326,7 @@ func (g *LowPass) getParam(name string) interface{} {
 }
 
 func (g *LowPass) signal() float64 {
+	return g.input.signal()
 
 	val := 1.0 * g.input.signal()
 	sign := 1.0
