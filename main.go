@@ -14,6 +14,12 @@ import (
 
 const sampleRate = 44100
 const polyphony = 64
+const master_vol = 0.1
+const attack = 100
+const decay = 1000
+const sustain = 0.5
+const release = 10000
+const sustain_decay_rate = 0.00001
 
 var f *os.File
 var mutex = &sync.Mutex{}
@@ -25,15 +31,21 @@ func (oscs Oscs) noteOn(which int, vel int64) {
 
 	osc, ok := oscs[which]
 	if ok {
+		// reuse old note
+		osc.setParam("amp", 1.0/63*float64(vel))
+		osc.setParam("savedEnv", osc.env())
 		osc.setParam("on", true)
-		osc.setParam("vol", 0.0)
+		osc.setParam("pedal_hold", false)
 		osc.setParam("t", 0)
 
 	} else {
-		osc := NewLowPass(&Sqr{amp: 0.05 / 127 * float64(vel)})
+		// alloc new note
+		osc := NewLowPass(&Sqr{})
+		osc.setParam("amp", 1.0/63*float64(vel))
 		osc.setParam("on", true)
 		osc.setParam("pitch", which)
-		osc.setParam("vol", 0.0)
+		osc.setParam("savedEnv", 0.0)
+		osc.setParam("t", 0)
 		oscs[which] = osc
 	}
 }
@@ -45,20 +57,22 @@ func (oscs Oscs) noteOff(which int) {
 	osc, ok := oscs[which]
 	if ok {
 		if osc.getParam("on").(bool) {
-			osc.setParam("on", false)
 			if pedal {
-				osc.setParam("pedal_on", true)
+				osc.setParam("pedal_hold", true)
+			} else {
+				osc.setParam("savedEnv", osc.env())
+				osc.setParam("t", 0)
+				osc.setParam("on", false)
 			}
 		}
 	}
 
 	for i, osc := range oscs {
-		if osc.getParam("vol").(float64) < 0.001 &&
+		if osc.env() == 0.0 &&
 			!osc.getParam("on").(bool) {
 			delete(oscs, i)
 		}
 	}
-	fmt.Printf("%d\n", len(oscs))
 }
 
 func (oscs Oscs) pedalOn() {
@@ -73,8 +87,11 @@ func (oscs Oscs) pedalOff() {
 
 	pedal = false
 	for _, osc := range oscs {
-		if osc != nil {
-			osc.setParam("pedal_on", false)
+		if osc != nil && osc.getParam("pedal_hold").(bool) {
+			osc.setParam("savedEnv", osc.env())
+			osc.setParam("t", 0)
+			osc.setParam("pedal_hold", false)
+			osc.setParam("on", false)
 		}
 	}
 }
@@ -184,30 +201,16 @@ func main() {
 
 type Osc interface {
 	signal() float64
+	env() float64
 	setParam(string, interface{})
 	getParam(string) interface{}
 }
 
 func (g *Sqr) signal() float64 {
+	amp := master_vol * g.env()
 	g.t++
-	on := g.on || g.pedal_on
-	if on {
-		g.vol = g.amp*0.1 + g.vol*0.9
-	} else {
-		g.vol *= 0.9997
-	}
-	amp := g.vol
-	//v := amp * math.Sin(2*math.Pi*g.phase)
 
-	amp *= math.Exp(-0.00001 * float64(g.t))
-
-	var ATTACK float64 = 3000
-	if float64(g.t) < ATTACK {
-		amp *= 1 + (ATTACK-float64(g.t))/ATTACK
-	}
-
-	v := 0.6 * amp * saw(g.phase)
-	//	v += 0.2 * tern(g.phase2 < 0.5, -amp, amp)
+	v := 0.6 * amp * sqr(g.phase)
 	v += 0.8 * amp * saw(g.phase2)
 	_, g.phase = math.Modf(g.phase + g.step)
 	_, g.phase2 = math.Modf(g.phase2 + g.step2)
@@ -217,16 +220,17 @@ func (g *Sqr) signal() float64 {
 // Basic tone generator
 
 type Sqr struct {
-	t        int64
-	step     float64
-	phase    float64
-	step2    float64
-	phase2   float64
-	amp      float64
-	vol      float64
-	on       bool
-	pedal_on bool
-	cur      int
+	t          int64
+	step       float64
+	phase      float64
+	step2      float64
+	phase2     float64
+	amp        float64
+	vol        float64
+	savedEnv   float64
+	on         bool
+	pedal_hold bool
+	cur        int
 }
 
 func (g *Sqr) setParam(name string, val interface{}) {
@@ -235,8 +239,8 @@ func (g *Sqr) setParam(name string, val interface{}) {
 		g.t = int64(val.(int))
 	case "on":
 		g.on = val.(bool)
-	case "pedal_on":
-		g.pedal_on = val.(bool)
+	case "pedal_hold":
+		g.pedal_hold = val.(bool)
 	case "pitch":
 		pitch := val.(int)
 		g.cur = pitch
@@ -246,6 +250,12 @@ func (g *Sqr) setParam(name string, val interface{}) {
 		g.step2 = (freq2 + 0.3) / sampleRate
 	case "vol":
 		g.vol = val.(float64)
+	case "amp":
+		g.amp = val.(float64)
+	case "savedEnv":
+		g.savedEnv = val.(float64)
+	default:
+		panic(fmt.Errorf("unknown param %s", name))
 	}
 }
 
@@ -257,10 +267,32 @@ func (g *Sqr) getParam(name string) interface{} {
 		return g.vol
 	case "on":
 		return g.on
-	case "pedal_on":
-		return g.pedal_on
+	case "pedal_hold":
+		return g.pedal_hold
 	}
 	return nil
+}
+
+func (g *Sqr) env() float64 {
+	t := g.t
+	if g.on {
+		if t < attack {
+			phase := float64(t) / attack
+			return (1.0-phase)*g.savedEnv + phase*g.amp
+		}
+		pat := float64(t) - attack
+		if pat < decay {
+			phase := pat / decay
+			return (1.0-phase)*g.amp + phase*g.amp*sustain
+		}
+		return g.amp * sustain * math.Exp(-sustain_decay_rate*float64(t-attack-decay))
+	} else {
+		phase := float64(t) / release
+		if phase > 1 {
+			return 0.0
+		}
+		return (1.0-phase)*g.savedEnv + phase*0.0
+	}
 }
 
 // Simple low-pass
@@ -283,20 +315,25 @@ func (g *LowPass) getParam(name string) interface{} {
 }
 
 func (g *LowPass) signal() float64 {
-	val := 500 * g.input.signal()
+
+	val := 1.0 * g.input.signal()
 	sign := 1.0
 	abs := math.Abs(val)
 	if val < 0.0 {
 		sign = -1.0
 	}
-	limit := 0.5
-	if abs > limit {
-		abs = limit
-	}
+	// limit := 0.5
+	// if abs > limit {
+	// 	abs = limit
+	// }
 	now := sign * abs
 
-	g.buf = 0.9*g.buf + 0.1*now
-	return g.buf
+	g.buf = 0.99*g.buf + 0.01*now
+	return 10 * g.buf
+}
+
+func (g *LowPass) env() float64 {
+	return g.input.env()
 }
 
 // Utils
