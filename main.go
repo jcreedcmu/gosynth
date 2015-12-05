@@ -13,7 +13,6 @@ import (
 )
 
 const sampleRate = 44100
-const polyphony = 64
 const master_vol = 0.1
 const attack = 100
 const decay = 1000
@@ -40,7 +39,7 @@ func (oscs Oscs) noteOn(which int, vel int64) {
 
 	} else {
 		// alloc new note
-		osc := NewLowPass(&Sqr{})
+		osc := &Sqr{}
 		osc.setParam("amp", 1.0/63*float64(vel))
 		osc.setParam("on", true)
 		osc.setParam("pitch", which)
@@ -123,6 +122,7 @@ type Oscs map[int]Osc
 var oscs Oscs
 var deleteMe map[int]Unit
 var inner time.Duration
+var innerCount int64
 
 func processAudio(out [][]float32) {
 	mutex.Lock()
@@ -136,7 +136,6 @@ func processAudio(out [][]float32) {
 			if osc != nil {
 				v := osc.signal()
 				w += float32(v)
-
 			}
 		}
 		out[0][i] = w
@@ -149,7 +148,8 @@ func processAudio(out [][]float32) {
 		delete(oscs, di)
 		delete(deleteMe, di)
 	}
-	inner = time.Now().Sub(start)
+	inner = inner + time.Now().Sub(start)
+	innerCount++
 }
 
 func openStream(cbk interface{}) (*portaudio.Stream, error) {
@@ -202,8 +202,10 @@ func main() {
 
 	go func() {
 		for {
-			fmt.Printf("inner loop last took %f samples\n", inner.Seconds()*sampleRate)
-			time.Sleep(2 * time.Second)
+			fmt.Printf("inner loop taking avg ~%f samples\n", inner.Seconds()*sampleRate/float64(innerCount))
+			inner = 0
+			innerCount = 0
+			time.Sleep(1 * time.Second)
 		}
 	}()
 
