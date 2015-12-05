@@ -66,13 +66,6 @@ func (oscs Oscs) noteOff(which int) {
 			}
 		}
 	}
-
-	for i, osc := range oscs {
-		if osc.env() == 0.0 &&
-			!osc.getParam("on").(bool) {
-			delete(oscs, i)
-		}
-	}
 }
 
 func (oscs Oscs) pedalOn() {
@@ -124,9 +117,13 @@ func listenMidi(in *portmidi.Stream, oscs Oscs) {
 	}
 }
 
+type Unit struct{}
 type Oscs map[int]Osc
 
-func (oscs Oscs) processAudio(out [][]float32) {
+var oscs Oscs
+var deleteMe map[int]Unit
+
+func processAudio(out [][]float32) {
 	mutex.Lock()
 	defer mutex.Unlock()
 
@@ -143,6 +140,10 @@ func (oscs Oscs) processAudio(out [][]float32) {
 	}
 	if f != nil {
 		chk(binary.Write(f, binary.BigEndian, out[0]))
+	}
+	for di := range deleteMe {
+		delete(oscs, di)
+		delete(deleteMe, di)
 	}
 }
 
@@ -184,10 +185,10 @@ func main() {
 		chk(err)
 	}
 
-	oscs := Oscs(make(map[int]Osc))
-	//	s, err := portaudio.OpenDefaultStream(0, 2, float64(sampleRate), 0, oscs.processAudio)
+	oscs = Oscs(make(map[int]Osc))
+	deleteMe = make(map[int]Unit)
 
-	s, err := openStream(oscs.processAudio)
+	s, err := openStream(processAudio)
 	fmt.Println("%+v\n", s.Info())
 	chk(err)
 	defer s.Close()
@@ -289,6 +290,9 @@ func (g *Sqr) env() float64 {
 	} else {
 		phase := float64(t) / release
 		if phase > 1 {
+			if _, ok := deleteMe[g.cur]; !ok {
+				deleteMe[g.cur] = struct{}{}
+			}
 			return 0.0
 		}
 		return (1.0-phase)*g.savedEnv + phase*0.0
