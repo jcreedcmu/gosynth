@@ -122,10 +122,13 @@ type Oscs map[int]Osc
 
 var oscs Oscs
 var deleteMe map[int]Unit
+var inner time.Duration
 
 func processAudio(out [][]float32) {
 	mutex.Lock()
 	defer mutex.Unlock()
+
+	start := time.Now()
 
 	for i := range out[0] {
 		out[0][i] = 0
@@ -145,6 +148,7 @@ func processAudio(out [][]float32) {
 		delete(oscs, di)
 		delete(deleteMe, di)
 	}
+	inner = time.Now().Sub(start)
 }
 
 func openStream(cbk interface{}) (*portaudio.Stream, error) {
@@ -195,9 +199,16 @@ func main() {
 
 	go listenMidi(in, oscs)
 
+	go func() {
+		for {
+			fmt.Printf("inner loop last took %f samples\n", inner.Seconds()*sampleRate)
+			time.Sleep(2 * time.Second)
+		}
+	}()
+
 	chk(s.Start())
-	time.Sleep(10000 * time.Second)
-	chk(s.Stop())
+	select {}
+	defer chk(s.Stop())
 }
 
 type Osc interface {
