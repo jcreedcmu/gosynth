@@ -283,17 +283,20 @@ func (g *LowPass) getParam(name string) interface{} {
 }
 
 func (g *LowPass) signal() float64 {
-	g.buf = 0.999*g.buf + 0.001*g.input.signal()
-	val := 500 * g.buf
+	val := 500 * g.input.signal()
 	sign := 1.0
 	abs := math.Abs(val)
 	if val < 0.0 {
 		sign = -1.0
 	}
-	if abs > 0.1 {
-		abs = 0.0 + 0.3*(1.0-1.0/(1.0+abs-0.1))
+	limit := 0.5
+	if abs > limit {
+		abs = limit
 	}
-	return sign * abs
+	now := sign * abs
+
+	g.buf = 0.9*g.buf + 0.1*now
+	return g.buf
 }
 
 // Utils
