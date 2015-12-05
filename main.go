@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"github.com/gordonklaus/portaudio"
 	"github.com/rakyll/portmidi"
+	"log"
 	"math"
-	"math/rand"
+	"net/rpc"
 	"os"
 	"sync"
 	"time"
@@ -128,8 +129,13 @@ func listenMidi(in *portmidi.Stream, oscs Oscs) {
 type Oscs map[int]Osc
 
 func filter(buf []float32) {
-	for i := range buf {
-		buf[i] *= (rand.Float32() - 0.5) * 2.0
+	err := client.Call("NoisyFilter.Filter", &buf, &buf)
+	if err != nil {
+		log.Fatal("filter error:", err)
+	}
+	log.Printf("LENGTH OF BUFFER %d", len(buf))
+	if len(buf) == 0 {
+		panic("wut")
 	}
 }
 
@@ -170,6 +176,8 @@ func openStream(cbk interface{}) (*portaudio.Stream, error) {
 	return portaudio.OpenStream(p, cbk)
 }
 
+var client *rpc.Client
+
 func main() {
 	shouldRecord := flag.Bool("record", false, "whether to record")
 	flag.Parse()
@@ -195,6 +203,11 @@ func main() {
 
 	oscs := Oscs(make(map[int]Osc))
 	//	s, err := portaudio.OpenDefaultStream(0, 2, float64(sampleRate), 0, oscs.processAudio)
+
+	client, err = rpc.DialHTTP("tcp", "localhost:1234")
+	if err != nil {
+		log.Fatal("dialing:", err)
+	}
 
 	s, err := openStream(oscs.processAudio)
 	fmt.Println("%+v\n", s.Info())
