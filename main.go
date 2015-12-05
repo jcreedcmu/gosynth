@@ -15,11 +15,60 @@ import (
 
 const sampleRate = 44100
 const master_vol = 0.1
-const attack = 100
-const decay = 10000
-const sustain = 0.5
-const release = 10000
-const sustain_decay_rate = 0.00001
+
+type Envelope struct {
+	Attack  int64
+	Decay   int64
+	Sustain float64
+	Release int64
+	lastEnv float64
+	Falloff float64
+	t       int64
+	gate    bool
+}
+
+func (e *Envelope) getEnv() (float64, bool) {
+	t := e.t
+	e.t++
+	if e.gate {
+		if t < e.Attack {
+			phase := float64(t) / float64(e.Attack)
+			return (1.0-phase)*e.lastEnv + phase, false
+		}
+		pat := float64(t - e.Attack)
+		if pat < float64(e.Decay) {
+			phase := pat / float64(e.Decay)
+			return (1.0 - phase) + phase*e.Sustain, false
+		}
+		if e.Sustain > 0.0 {
+			return e.Sustain * math.Exp(-e.Falloff*float64(t-e.Attack-e.Decay)), false
+		}
+	} else {
+		phase := float64(t) / float64(e.Release)
+		if phase < 1 {
+			return (1.0-phase)*e.lastEnv + phase*0.0, false
+		}
+	}
+	return 0.0, true
+}
+
+func (e *Envelope) Start() {
+	e.lastEnv = 0
+	e.gate = true
+	e.t = 0
+}
+
+func (e *Envelope) Restart() {
+	e.lastEnv, _ = e.getEnv()
+	e.gate = true
+	e.t = 0
+}
+
+func (e *Envelope) Stop() {
+	e.lastEnv, _ = e.getEnv()
+	e.gate = false
+	e.t = 0
+}
 
 var f *os.File
 var mutex = &sync.Mutex{}
@@ -32,22 +81,24 @@ func (oscs Oscs) noteOn(which int, vel int64) {
 	osc, ok := oscs[which]
 	if ok {
 		// reuse old note
-		osc.setParam("amp", 1.0/63*float64(vel))
-		osc.setParam("savedEnv", osc.env())
-		osc.setParam("on", true)
-		osc.setParam("pedal_hold", false)
-		osc.setParam("t", 0)
-
+		osc.Restart()
 	} else {
 		// alloc new note
-		osc := &Sqr{}
-		osc.setParam("amp", 1.0/63*float64(vel))
-		osc.setParam("on", true)
+		osc = &Sqr{
+			Envelope: Envelope{
+				Attack:  100,
+				Decay:   10000,
+				Sustain: 0.5,
+				Release: 10000,
+				Falloff: 0.00001,
+			},
+		}
 		osc.setParam("pitch", which)
-		osc.setParam("savedEnv", 0.0)
-		osc.setParam("t", 0)
+		osc.Start()
 		oscs[which] = osc
 	}
+	osc.setParam("pedal_hold", false)
+	osc.setParam("amp", 0.5/127*float64(vel))
 }
 
 func (oscs Oscs) noteOff(which int) {
@@ -56,14 +107,11 @@ func (oscs Oscs) noteOff(which int) {
 
 	osc, ok := oscs[which]
 	if ok {
-		if osc.getParam("on").(bool) {
-			if pedal {
-				osc.setParam("pedal_hold", true)
-			} else {
-				osc.setParam("savedEnv", osc.env())
-				osc.setParam("t", 0)
-				osc.setParam("on", false)
-			}
+		if pedal {
+			osc.setParam("pedal_hold", true)
+		} else {
+			fmt.Printf("STOPPING %d\n", which)
+			osc.Stop()
 		}
 	}
 }
@@ -81,10 +129,8 @@ func (oscs Oscs) pedalOff() {
 	pedal = false
 	for _, osc := range oscs {
 		if osc != nil && osc.getParam("pedal_hold").(bool) {
-			osc.setParam("savedEnv", osc.env())
-			osc.setParam("t", 0)
 			osc.setParam("pedal_hold", false)
-			osc.setParam("on", false)
+			osc.Stop()
 		}
 	}
 }
@@ -121,18 +167,24 @@ type Unit struct{}
 type Oscs map[int]Osc
 
 var oscs Oscs
-var deleteMe map[int]Unit
 var inner time.Duration
 var innerCount int64
 
 var percOdom int
 var percs Oscs = Oscs(make(map[int]Osc))
 
-func playDrum() {
+func playDrum(amp float64) {
 	percOdom++
-	percs[percOdom] = &Drum{
-		amp: 1.0,
+	drum := &Drum{
+		amp: 0.3 * amp,
+		Envelope: Envelope{
+			Attack:  1000,
+			Decay:   10000,
+			Sustain: 0.0,
+		},
 	}
+	drum.Start()
+	percs[percOdom] = drum
 }
 
 func processAudio(out [][]float32) {
@@ -143,21 +195,27 @@ func processAudio(out [][]float32) {
 
 	for i := range out[0] {
 		w := float32(0)
-		for _, osc := range oscs {
-			w += float32(osc.signal())
+		for i, osc := range oscs {
+			s, kill := osc.signal()
+			w += float32(s)
+			if kill {
+				delete(oscs, i)
+				continue
+			}
 		}
-		for _, osc := range percs {
-			w += float32(osc.signal())
+		for i, osc := range percs {
+			s, kill := osc.signal()
+			w += float32(s)
+			if kill {
+				delete(percs, i)
+				continue
+			}
 		}
 		out[0][i] = w
 		out[1][i] = w
 	}
 	if f != nil {
 		chk(binary.Write(f, binary.BigEndian, out[0]))
-	}
-	for di := range deleteMe {
-		delete(oscs, di)
-		delete(deleteMe, di)
 	}
 	inner = inner + time.Now().Sub(start)
 	innerCount++
@@ -197,14 +255,13 @@ func main() {
 	}
 
 	oscs = Oscs(make(map[int]Osc))
-	deleteMe = make(map[int]Unit)
 
 	s, err := openStream(processAudio)
 	fmt.Println("%+v\n", s.Info())
 	chk(err)
 	defer s.Close()
 
-	if false {
+	if true {
 		portmidi.Initialize()
 		in, err := portmidi.NewInputStream(portmidi.GetDefaultInputDeviceId(), 1024)
 		chk(err)
@@ -213,8 +270,12 @@ func main() {
 	}
 
 	go func() {
-		time.Sleep(1 * time.Second)
-		playDrum()
+		for {
+			playDrum(1.0)
+			time.Sleep(400 * time.Millisecond)
+			playDrum(0.5)
+			time.Sleep(400 * time.Millisecond)
+		}
 	}()
 
 	go func() {
@@ -232,10 +293,13 @@ func main() {
 }
 
 type Osc interface {
-	signal() float64
-	env() float64
+	signal() (float64, bool)
 	setParam(string, interface{})
 	getParam(string) interface{}
+	Start()
+	Stop()
+	Restart()
+	getEnv() (float64, bool)
 }
 
 // Basic tone generator
@@ -251,17 +315,19 @@ type Sqr struct {
 	on         bool
 	pedal_hold bool
 	cur        int
+	Envelope
 }
 
-func (g *Sqr) signal() float64 {
-	amp := master_vol * g.env()
+func (g *Sqr) signal() (float64, bool) {
+	env, kill := g.getEnv()
+	amp := g.amp * master_vol * env
 	g.t++
 
 	v := 0.6 * amp * sqr(g.phase)
 	v += 0.8 * amp * saw(g.phase2)
 	_, g.phase = math.Modf(g.phase + g.step)
 	_, g.phase2 = math.Modf(g.phase2 + g.step2)
-	return v
+	return v, kill
 }
 
 func (g *Sqr) setParam(name string, val interface{}) {
@@ -300,148 +366,26 @@ func (g *Sqr) getParam(name string) interface{} {
 	return nil
 }
 
-func (g *Sqr) env() float64 {
-	t := g.t
-	if g.on {
-		if t < attack {
-			phase := float64(t) / attack
-			return (1.0-phase)*g.savedEnv + phase*g.amp
-		}
-		pat := float64(t) - attack
-		if pat < decay {
-			phase := pat / decay
-			return (1.0-phase)*g.amp + phase*g.amp*sustain
-		}
-		return g.amp * sustain * math.Exp(-sustain_decay_rate*float64(t-attack-decay))
-	} else {
-		phase := float64(t) / release
-		if phase > 1 {
-			if _, ok := deleteMe[g.cur]; !ok {
-				deleteMe[g.cur] = struct{}{}
-			}
-			return 0.0
-		}
-		return (1.0-phase)*g.savedEnv + phase*0.0
-	}
-}
-
-// Simple low-pass
-
-type LowPass struct {
-	buf   float64
-	input Osc
-}
-
-func NewLowPass(input Osc) *LowPass {
-	return &LowPass{buf: 0, input: input}
-}
-
-func (g *LowPass) setParam(name string, val interface{}) {
-	g.input.setParam(name, val)
-}
-
-func (g *LowPass) getParam(name string) interface{} {
-	return g.input.getParam(name)
-}
-
-func (g *LowPass) signal() float64 {
-	return g.input.signal()
-
-	val := 1.0 * g.input.signal()
-	sign := 1.0
-	abs := math.Abs(val)
-	if val < 0.0 {
-		sign = -1.0
-	}
-	// limit := 0.5
-	// if abs > limit {
-	// 	abs = limit
-	// }
-	now := sign * abs
-
-	g.buf = 0.99*g.buf + 0.01*now
-	return 10 * g.buf
-}
-
-func (g *LowPass) env() float64 {
-	return g.input.env()
-}
-
 // Drum
 
 type Drum struct {
-	t          int64
-	step       float64
-	phase      float64
-	step2      float64
-	phase2     float64
-	amp        float64
-	savedEnv   float64
-	on         bool
-	pedal_hold bool
-	cur        int
+	amp float64
+	Envelope
 }
 
-func (g *Drum) signal() float64 {
-	amp := master_vol * g.env()
-	g.t++
+func (g *Drum) signal() (float64, bool) {
+	env, kill := g.getEnv()
+	amp := master_vol * env
 
-	v := amp * 2 * (rand.Float64() - 0.5)
-	return v
+	v := g.amp * amp * 2 * (rand.Float64() - 0.5)
+	return v, kill
 }
 
 func (g *Drum) setParam(name string, val interface{}) {
-	switch name {
-	case "t":
-		g.t = int64(val.(int))
-	case "on":
-		g.on = val.(bool)
-	case "pedal_hold":
-		g.pedal_hold = val.(bool)
-	case "pitch":
-		pitch := val.(int)
-		g.cur = pitch
-		freq := (440 * math.Pow(2, float64(pitch-69)/12))
-		g.step = freq / sampleRate
-		freq2 := (880 * math.Pow(2, float64(pitch-69)/12))
-		g.step2 = (freq2 + 0.3) / sampleRate
-	case "amp":
-		g.amp = val.(float64)
-	case "savedEnv":
-		g.savedEnv = val.(float64)
-	default:
-		panic(fmt.Errorf("unknown param %s", name))
-	}
 }
 
 func (g *Drum) getParam(name string) interface{} {
-	switch name {
-	case "pitch":
-		return g.cur
-	case "on":
-		return g.on
-	case "pedal_hold":
-		return g.pedal_hold
-	}
 	return nil
-}
-
-func (g *Drum) env() float64 {
-	t := g.t
-
-	if t < attack {
-		phase := float64(t) / attack
-		return (1.0-phase)*0 + phase*g.amp
-	}
-	pat := float64(t) - attack
-	if pat < decay {
-		phase := pat / decay
-		return (1.0-phase)*g.amp + phase*0.0
-	}
-	if _, ok := percs[g.cur]; ok {
-		delete(percs, g.cur)
-	}
-	return 0.0
 }
 
 // Utils
