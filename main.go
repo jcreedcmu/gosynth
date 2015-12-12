@@ -16,6 +16,16 @@ import (
 const sampleRate = 44100
 const master_vol = 0.1
 
+const S = sampleRate / (2 * math.Pi * 449.0)
+const Q = 1.0
+
+const A = -(S/Q + 2.0*S*S) / (1.0 + S/Q + S*S)
+const B = (S * S) / (1.0 + S/Q + S*S)
+const C = 10.0 / (1.0 + S/Q + S*S)
+
+var lobuf1 float64 = 0.0
+var lobuf2 float64 = 0.0
+
 type Envelope struct {
 	Attack  int64
 	Decay   int64
@@ -86,8 +96,8 @@ func (oscs Oscs) noteOn(which int, vel int64) {
 		// alloc new note
 		osc = &Sqr{
 			Envelope: Envelope{
-				Attack:  100,
-				Decay:   10000,
+				Attack:  500,
+				Decay:   500,
 				Sustain: 0.5,
 				Release: 10000,
 				Falloff: 0.00001,
@@ -198,10 +208,10 @@ func processAudio(out [][]float32) {
 	start := time.Now()
 
 	for i := range out[0] {
-		w := float32(0)
+		w := 0.0
 		for i, osc := range oscs {
 			s, kill := osc.signal()
-			w += float32(s)
+			w += s
 			if kill {
 				delete(oscs, i)
 				continue
@@ -209,14 +219,19 @@ func processAudio(out [][]float32) {
 		}
 		for i, osc := range percs {
 			s, kill := osc.signal()
-			w += float32(s)
+			w += s
 			if kill {
 				delete(percs, i)
 				continue
 			}
 		}
-		out[0][i] = w
-		out[1][i] = w
+
+		lo_out := C*w - A*lobuf1 - B*lobuf2
+		lobuf2 = lobuf1
+		lobuf1 = lo_out
+
+		out[0][i] = float32(lo_out)
+		out[1][i] = float32(lo_out)
 	}
 	if f != nil {
 		chk(binary.Write(f, binary.BigEndian, out[0]))
@@ -282,20 +297,20 @@ func main() {
 		defer portmidi.Terminate()
 	}
 
-	go func() {
-		for {
-			playDrum(1, 1.0)
-			time.Sleep(700 * time.Millisecond)
-			playDrum(103, 1.0)
-			time.Sleep(700 * time.Millisecond)
-			playDrum(1, 1.0)
-			time.Sleep(350 * time.Millisecond)
-			playDrum(2, 0.7)
-			time.Sleep(350 * time.Millisecond)
-			playDrum(103, 1.0)
-			time.Sleep(700 * time.Millisecond)
-		}
-	}()
+	// go func() {
+	// 	for {
+	// 		playDrum(1, 1.0)
+	// 		time.Sleep(700 * time.Millisecond)
+	// 		playDrum(103, 1.0)
+	// 		time.Sleep(700 * time.Millisecond)
+	// 		playDrum(1, 1.0)
+	// 		time.Sleep(350 * time.Millisecond)
+	// 		playDrum(2, 0.7)
+	// 		time.Sleep(350 * time.Millisecond)
+	// 		playDrum(103, 1.0)
+	// 		time.Sleep(700 * time.Millisecond)
+	// 	}
+	// }()
 
 	go func() {
 		for {
@@ -335,6 +350,9 @@ type Sqr struct {
 	pedal_hold bool
 	cur        int
 	Envelope
+
+	lobuf1 float64
+	lobuf2 float64
 }
 
 func (g *Sqr) signal() (float64, bool) {
@@ -342,11 +360,17 @@ func (g *Sqr) signal() (float64, bool) {
 	amp := g.amp * master_vol * env
 	g.t++
 
-	v := 0.6 * amp * saw(g.phase)
-	v += 0.8 * amp * saw(g.phase2)
+	v := 0.6 * sqr(g.phase)
+	v += 0.8 * sqr(g.phase2)
 	_, g.phase = math.Modf(g.phase + g.step)
 	_, g.phase2 = math.Modf(g.phase2 + g.step2)
-	return v, kill
+
+	return v * amp, kill
+
+	// lo_out := C*v - A*g.lobuf1 - B*g.lobuf2
+	// g.lobuf2 = g.lobuf1
+	// g.lobuf1 = lo_out
+	// return lo_out * amp, kill
 }
 
 func (g *Sqr) setParam(name string, val interface{}) {
@@ -385,6 +409,13 @@ func (g *Sqr) getParam(name string) interface{} {
 	return nil
 }
 
+func (g *Sqr) Restart() {
+	fmt.Printf("restarting %d\n", g.cur)
+	// g.lobuf1 = 0
+	// g.lobuf2 = 0
+	g.Envelope.Restart()
+}
+
 // Drum
 
 type Drum struct {
@@ -393,18 +424,25 @@ type Drum struct {
 	amp  float64
 	buf  []float64
 	Envelope
+
+	lobuf1 float64
+	lobuf2 float64
 }
 
 func (g *Drum) signal() (float64, bool) {
 	env, kill := g.getEnv()
 	amp := master_vol * env
 
-	v := g.amp * amp * g.buf[g.t]
+	v := g.amp * g.buf[g.t]
 	g.t += g.freq
 	if g.t >= len(g.buf) {
 		g.t -= len(g.buf)
 	}
-	return v, kill
+
+	lo_out := C*v - A*g.lobuf1 - B*g.lobuf2
+	g.lobuf2 = g.lobuf1
+	g.lobuf1 = lo_out
+	return lo_out * amp, kill
 }
 
 func (g *Drum) setParam(name string, val interface{}) {
