@@ -16,7 +16,7 @@ import (
 const sampleRate = 44100
 const master_vol = 0.1
 
-const S = sampleRate / (2 * math.Pi * 449.0)
+const S = sampleRate / (2 * math.Pi * 1469.0)
 const Q = 1.0
 
 const A = -(S/Q + 2.0*S*S) / (1.0 + S/Q + S*S)
@@ -99,8 +99,8 @@ func (oscs Oscs) noteOn(which int, vel int64) {
 				Attack:  500,
 				Decay:   500,
 				Sustain: 0.5,
-				Release: 10000,
-				Falloff: 0.00001,
+				Release: 1000,
+				Falloff: 0.000015,
 			},
 		}
 		osc.setParam("pitch", which)
@@ -223,6 +223,15 @@ func processAudio(out [][]float32) {
 			if kill {
 				delete(percs, i)
 				continue
+			}
+		}
+
+		LIMIT := 0.02
+		if math.Abs(w) > LIMIT {
+			if w > 0 {
+				w = LIMIT
+			} else {
+				w = -LIMIT
 			}
 		}
 
@@ -361,7 +370,7 @@ func (g *Sqr) signal() (float64, bool) {
 	g.t++
 
 	v := 0.6 * sqr(g.phase)
-	v += 0.8 * sqr(g.phase2)
+	v += 0.8 * saw(g.phase2)
 	_, g.phase = math.Modf(g.phase + g.step)
 	_, g.phase2 = math.Modf(g.phase2 + g.step2)
 
@@ -384,9 +393,9 @@ func (g *Sqr) setParam(name string, val interface{}) {
 	case "pitch":
 		pitch := val.(int)
 		g.cur = pitch
-		freq := (440 * math.Pow(2, float64(pitch-69)/12))
+		freq := (440 * math.Pow(2, float64(pitch-71)/12))
 		g.step = freq / sampleRate
-		freq2 := (880 * math.Pow(2, float64(pitch-69)/12))
+		freq2 := (1761 * math.Pow(2, float64(pitch-71)/12))
 		g.step2 = (freq2 + 0.3) / sampleRate
 	case "amp":
 		g.amp = val.(float64)
