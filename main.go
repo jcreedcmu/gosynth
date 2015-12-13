@@ -18,15 +18,12 @@ import (
 
 const sampleRate = 44100
 
-const S = sampleRate / (2 * math.Pi * 1469.0)
 const Q = 1.0
-const A = -(S/Q + 2.0*S*S) / (1.0 + S/Q + S*S)
-const B = (S * S) / (1.0 + S/Q + S*S)
-const C = 10.0 / (1.0 + S/Q + S*S)
 
 var lobuf1 float64 = 0.0
 var lobuf2 float64 = 0.0
 var master_vol = 0.1
+var resFreq = 1469.0
 
 type Envelope struct {
 	Attack  int64
@@ -209,6 +206,12 @@ func processAudio(out [][]float32) {
 
 	start := time.Now()
 
+	// Compute some params for the low-pass
+	S := sampleRate / (2 * math.Pi * resFreq)
+	A := -(S/Q + 2.0*S*S) / (1.0 + S/Q + S*S)
+	B := (S * S) / (1.0 + S/Q + S*S)
+	C := 10.0 / (1.0 + S/Q + S*S)
+
 	for i := range out[0] {
 		w := 0.0
 		for i, osc := range oscs {
@@ -272,8 +275,11 @@ func cmdHandle(cmd service.WsCmd) {
 
 	switch {
 	case cmd.Action == "master_vol":
-		log.Println("setting master_vol to %f\n", cmd.Fparam0)
+		log.Printf("setting master_vol to %f\n", cmd.Fparam0)
 		master_vol = cmd.Fparam0
+	case cmd.Action == "res_freq":
+		log.Printf("setting res_freq to %f\n", cmd.Fparam0)
+		resFreq = cmd.Fparam0
 	}
 }
 
@@ -466,10 +472,11 @@ func (g *Drum) signal() (float64, bool) {
 		g.t -= len(g.buf)
 	}
 
-	lo_out := C*v - A*g.lobuf1 - B*g.lobuf2
-	g.lobuf2 = g.lobuf1
-	g.lobuf1 = lo_out
-	return lo_out * amp, kill
+	return v * amp, kill
+	// lo_out := C*v - A*g.lobuf1 - B*g.lobuf2
+	// g.lobuf2 = g.lobuf1
+	// g.lobuf1 = lo_out
+	// return lo_out * amp, kill
 }
 
 func (g *Drum) setParam(name string, val interface{}) {
