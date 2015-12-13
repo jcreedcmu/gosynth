@@ -2,29 +2,32 @@ package main
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"github.com/gordonklaus/portaudio"
+	"github.com/gorilla/websocket"
 	"github.com/rakyll/portmidi"
+	"log"
 	"math"
 	"math/rand"
+	"net/http"
 	"os"
 	"sync"
 	"time"
 )
 
 const sampleRate = 44100
-const master_vol = 0.1
 
 const S = sampleRate / (2 * math.Pi * 1469.0)
 const Q = 1.0
-
 const A = -(S/Q + 2.0*S*S) / (1.0 + S/Q + S*S)
 const B = (S * S) / (1.0 + S/Q + S*S)
 const C = 10.0 / (1.0 + S/Q + S*S)
 
 var lobuf1 float64 = 0.0
 var lobuf2 float64 = 0.0
+var master_vol = 0.1
 
 type Envelope struct {
 	Attack  int64
@@ -264,8 +267,53 @@ func openStream(cbk interface{}) (*portaudio.Stream, error) {
 	return portaudio.OpenStream(p, cbk)
 }
 
+var upgrader = websocket.Upgrader{}
+
+func rootHandle(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "Hello World")
+}
+
+type WsCmd struct {
+	Action  string  `json:"action"`
+	Fparam0 float64 `json:"fparam0"`
+}
+
+func wsHandle(w http.ResponseWriter, r *http.Request) {
+	c, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Print("upgrade:", err)
+		return
+	}
+	go func() {
+		defer c.Close()
+		for {
+			mt, message, err := c.ReadMessage()
+			if err != nil {
+				log.Println("read:", err)
+				break
+			}
+			if mt == websocket.TextMessage {
+				var cmd WsCmd
+
+				log.Printf("got: %s\n", message)
+				err := json.Unmarshal(message, &cmd)
+				if err != nil {
+					log.Println("json err:", err)
+					continue
+				}
+				log.Printf("got json: %+v\n", cmd)
+				if cmd.Action == "master_vol" {
+					log.Println("setting master_vol to %f\n", cmd.Fparam0)
+					master_vol = cmd.Fparam0
+				}
+			}
+		}
+	}()
+}
+
 func main() {
 	shouldRecord := flag.Bool("record", false, "whether to record")
+	addr := flag.String("addr", "localhost:8080", "http service address")
 	flag.Parse()
 
 	drumBuf = make([]float64, 40000)
@@ -297,6 +345,14 @@ func main() {
 	fmt.Println("%+v\n", s.Info())
 	chk(err)
 	defer s.Close()
+
+	if true {
+		http.HandleFunc("/", rootHandle)
+		http.HandleFunc("/ws", wsHandle)
+		go func() {
+			log.Fatal(http.ListenAndServe(*addr, nil))
+		}()
+	}
 
 	if true {
 		portmidi.Initialize()
