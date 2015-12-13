@@ -1,17 +1,16 @@
 package main
 
 import (
+	"github.com/jcreedcmu/gosynth/service"
+
 	"encoding/binary"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"github.com/gordonklaus/portaudio"
-	"github.com/gorilla/websocket"
 	"github.com/rakyll/portmidi"
 	"log"
 	"math"
 	"math/rand"
-	"net/http"
 	"os"
 	"sync"
 	"time"
@@ -267,48 +266,15 @@ func openStream(cbk interface{}) (*portaudio.Stream, error) {
 	return portaudio.OpenStream(p, cbk)
 }
 
-var upgrader = websocket.Upgrader{}
+func cmdHandle(cmd service.WsCmd) {
+	mutex.Lock()
+	defer mutex.Unlock()
 
-func rootHandle(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Hello World")
-}
-
-type WsCmd struct {
-	Action  string  `json:"action"`
-	Fparam0 float64 `json:"fparam0"`
-}
-
-func wsHandle(w http.ResponseWriter, r *http.Request) {
-	c, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Print("upgrade:", err)
-		return
+	switch {
+	case cmd.Action == "master_vol":
+		log.Println("setting master_vol to %f\n", cmd.Fparam0)
+		master_vol = cmd.Fparam0
 	}
-	go func() {
-		defer c.Close()
-		for {
-			mt, message, err := c.ReadMessage()
-			if err != nil {
-				log.Println("read:", err)
-				break
-			}
-			if mt == websocket.TextMessage {
-				var cmd WsCmd
-
-				log.Printf("got: %s\n", message)
-				err := json.Unmarshal(message, &cmd)
-				if err != nil {
-					log.Println("json err:", err)
-					continue
-				}
-				log.Printf("got json: %+v\n", cmd)
-				if cmd.Action == "master_vol" {
-					log.Println("setting master_vol to %f\n", cmd.Fparam0)
-					master_vol = cmd.Fparam0
-				}
-			}
-		}
-	}()
 }
 
 func main() {
@@ -347,11 +313,7 @@ func main() {
 	defer s.Close()
 
 	if true {
-		http.HandleFunc("/", rootHandle)
-		http.HandleFunc("/ws", wsHandle)
-		go func() {
-			log.Fatal(http.ListenAndServe(*addr, nil))
-		}()
+		service.Initialize(*addr, cmdHandle)
 	}
 
 	if true {
