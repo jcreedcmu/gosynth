@@ -18,7 +18,7 @@ import (
 
 const sampleRate = 44100
 
-const Q = 1.0
+const Q = 10.0
 
 var lobuf1 float64 = 0.0
 var lobuf2 float64 = 0.0
