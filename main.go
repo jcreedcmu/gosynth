@@ -18,12 +18,18 @@ import (
 
 const sampleRate = 44100
 
-const Q = 10.0
+const Q = 1.0
 
 var lobuf1 float64 = 0.0
 var lobuf2 float64 = 0.0
-var master_vol = 0.1
-var resFreq = 1469.0
+
+const reverbLen = 441000
+
+var reverbIx = 0
+var reverbBuf [reverbLen]float64
+var master_vol = 0.3
+var post_amp = 2.0
+var resFreq = 246.0
 
 type Envelope struct {
 	Attack  int64
@@ -231,7 +237,7 @@ func processAudio(out [][]float32) {
 			}
 		}
 
-		LIMIT := 0.02
+		LIMIT := 0.01
 		if math.Abs(w) > LIMIT {
 			if w > 0 {
 				w = LIMIT
@@ -244,14 +250,31 @@ func processAudio(out [][]float32) {
 		lobuf2 = lobuf1
 		lobuf1 = lo_out
 
-		out[0][i] = float32(lo_out)
-		out[1][i] = float32(lo_out)
+		// wet dry mix?
+
+		lo_out = w*0.05 + lo_out*0.95
+		// reverb
+
+		reverbIx = (reverbIx + reverbLen - 1) % reverbLen
+		reverbBuf[reverbIx] = lo_out +
+			wrapReverb(8932)*0.15 +
+			wrapReverb(5943)*0.2 +
+			wrapReverb(653)*0.025 +
+			wrapReverb(552)*0.025 +
+			wrapReverb(54)*0.05
+		out[1][i] = float32(post_amp * reverbBuf[reverbIx])
+		out[0][i] = float32(post_amp * reverbBuf[(reverbIx+3)%reverbLen])
+
 	}
 	if f != nil {
 		chk(binary.Write(f, binary.BigEndian, out[0]))
 	}
 	inner = inner + time.Now().Sub(start)
 	innerCount++
+}
+
+func wrapReverb(a int) float64 {
+	return reverbBuf[(reverbIx+a)%reverbLen]
 }
 
 func openStream(cbk interface{}) (*portaudio.Stream, error) {
@@ -417,9 +440,9 @@ func (g *Sqr) setParam(name string, val interface{}) {
 	case "pitch":
 		pitch := val.(int)
 		g.cur = pitch
-		freq := (440 * math.Pow(2, float64(pitch-71)/12))
+		freq := (440 * math.Pow(2, float64(pitch-69)/12))
 		g.step = freq / sampleRate
-		freq2 := (1761 * math.Pow(2, float64(pitch-71)/12))
+		freq2 := (881 * math.Pow(2, float64(pitch-69)/12))
 		g.step2 = (freq2 + 0.3) / sampleRate
 	case "amp":
 		g.amp = val.(float64)
