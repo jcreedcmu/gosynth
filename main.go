@@ -16,20 +16,17 @@ import (
 	"time"
 )
 
-const sampleRate = 44100
-
-const Q = 1.0
-
-var lobuf1 float64 = 0.0
-var lobuf2 float64 = 0.0
-
-const reverbLen = 441000
-
-var reverbIx = 0
-var reverbBuf [reverbLen]float64
-var master_vol = 0.3
-var post_amp = 2.0
-var resFreq = 246.0
+type Unit struct{}
+type Osc interface {
+	signal() (float64, bool)
+	setParam(string, interface{})
+	getParam(string) interface{}
+	Start()
+	Stop()
+	Restart()
+	getEnv() (float64, bool)
+}
+type Oscs map[int]Osc
 
 type Envelope struct {
 	Attack  int64
@@ -41,6 +38,27 @@ type Envelope struct {
 	t       int64
 	gate    bool
 }
+
+type Bus []float64
+type Filter func(bus Bus)
+
+const sampleRate = 44100
+
+const Q = 0.7
+
+var lobuf1 float64 = 0.0
+var lobuf2 float64 = 0.0
+
+const reverbLen = 441000
+
+var reverbIx = 0
+var reverbBuf [reverbLen]float64
+var master_vol = 0.3
+var post_amp = 2.0
+var resFreq = 1246.0
+
+var bus Bus = make([]float64, 4)
+var filters []Filter
 
 func (e *Envelope) getEnv() (float64, bool) {
 	t := e.t
@@ -178,9 +196,6 @@ func listenMidi(in *portmidi.Stream, oscs Oscs) {
 	}
 }
 
-type Unit struct{}
-type Oscs map[int]Osc
-
 var oscs Oscs
 var inner time.Duration
 var innerCount int64
@@ -212,17 +227,15 @@ func processAudio(out [][]float32) {
 
 	start := time.Now()
 
-	// Compute some params for the low-pass
-	S := sampleRate / (2 * math.Pi * resFreq)
-	A := -(S/Q + 2.0*S*S) / (1.0 + S/Q + S*S)
-	B := (S * S) / (1.0 + S/Q + S*S)
-	C := 10.0 / (1.0 + S/Q + S*S)
-
 	for i := range out[0] {
-		w := 0.0
+
+		for i := range bus {
+			bus[i] = 0.0
+		}
+
 		for i, osc := range oscs {
 			s, kill := osc.signal()
-			w += s
+			bus[0] += s
 			if kill {
 				delete(oscs, i)
 				continue
@@ -230,41 +243,18 @@ func processAudio(out [][]float32) {
 		}
 		for i, osc := range percs {
 			s, kill := osc.signal()
-			w += s
+			bus[0] += s
 			if kill {
 				delete(percs, i)
 				continue
 			}
 		}
 
-		LIMIT := 0.01
-		if math.Abs(w) > LIMIT {
-			if w > 0 {
-				w = LIMIT
-			} else {
-				w = -LIMIT
-			}
+		for _, filter := range filters {
+			filter(bus)
 		}
-
-		lo_out := C*w - A*lobuf1 - B*lobuf2
-		lobuf2 = lobuf1
-		lobuf1 = lo_out
-
-		// wet dry mix?
-
-		lo_out = w*0.05 + lo_out*0.95
-		// reverb
-
-		reverbIx = (reverbIx + reverbLen - 1) % reverbLen
-		reverbBuf[reverbIx] = lo_out +
-			wrapReverb(8932)*0.15 +
-			wrapReverb(5943)*0.2 +
-			wrapReverb(653)*0.025 +
-			wrapReverb(552)*0.025 +
-			wrapReverb(54)*0.05
-		out[1][i] = float32(post_amp * reverbBuf[reverbIx])
-		out[0][i] = float32(post_amp * reverbBuf[(reverbIx+3)%reverbLen])
-
+		out[0][i] = float32(bus[0])
+		out[1][i] = float32(bus[1])
 	}
 	if f != nil {
 		chk(binary.Write(f, binary.BigEndian, out[0]))
@@ -296,6 +286,8 @@ func cmdHandle(cmd service.WsCmd) {
 	mutex.Lock()
 	defer mutex.Unlock()
 
+	fmt.Printf("HERE %+v\n", cmd)
+
 	switch {
 	case cmd.Action == "master_vol":
 		log.Printf("setting master_vol to %f\n", cmd.Fparam0)
@@ -303,6 +295,11 @@ func cmdHandle(cmd service.WsCmd) {
 	case cmd.Action == "res_freq":
 		log.Printf("setting res_freq to %f\n", cmd.Fparam0)
 		resFreq = cmd.Fparam0
+		filters = []Filter{lopass(resFreq, Q), spread}
+	case cmd.Action == "no_reverb":
+		filters = []Filter{lopass(resFreq, Q), spread}
+	case cmd.Action == "reverb":
+		filters = []Filter{lopass(resFreq, Q), reverb, spread}
 	}
 }
 
@@ -368,6 +365,8 @@ func main() {
 	// 	}
 	// }()
 
+	filters = []Filter{overdrive, lopass(resFreq, Q), reverb, spread}
+
 	go func() {
 		for {
 			fmt.Printf("inner loop taking avg ~%f samples\n", inner.Seconds()*sampleRate/float64(innerCount))
@@ -382,14 +381,52 @@ func main() {
 	defer chk(s.Stop())
 }
 
-type Osc interface {
-	signal() (float64, bool)
-	setParam(string, interface{})
-	getParam(string) interface{}
-	Start()
-	Stop()
-	Restart()
-	getEnv() (float64, bool)
+// some filters
+func overdrive(bus Bus) {
+	LIMIT := 0.01
+	w := bus[0]
+	if math.Abs(w) > LIMIT {
+		if w > 0 {
+			w = LIMIT
+		} else {
+			w = -LIMIT
+		}
+	}
+	bus[0] = w
+}
+
+func lopass(resFreq float64, Q float64) Filter {
+	// Compute some params for the low-pass
+	S := sampleRate / (2 * math.Pi * resFreq)
+	A := -(S/Q + 2.0*S*S) / (1.0 + S/Q + S*S)
+	B := (S * S) / (1.0 + S/Q + S*S)
+	C := 10.0 / (1.0 + S/Q + S*S)
+	return func(bus Bus) {
+		w := bus[0]
+		lo_out := C*w - A*lobuf1 - B*lobuf2
+		lobuf2 = lobuf1
+		lobuf1 = lo_out
+
+		// wet/dry mix
+		bus[0] = w*0.05 + lo_out*0.95
+	}
+}
+
+// reverb
+func reverb(bus Bus) {
+	reverbIx = (reverbIx + reverbLen - 1) % reverbLen
+	reverbBuf[reverbIx] = bus[0] +
+		wrapReverb(8932)*0.15 +
+		wrapReverb(5943)*0.2 +
+		wrapReverb(653)*0.025 +
+		wrapReverb(552)*0.025 +
+		wrapReverb(54)*0.05
+	bus[0] = post_amp * reverbBuf[reverbIx]
+}
+
+// spread
+func spread(bus Bus) {
+	bus[1] = bus[0]
 }
 
 // Basic tone generator
