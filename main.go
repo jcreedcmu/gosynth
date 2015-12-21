@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/jcreedcmu/gosynth/service"
 
+	"bufio"
 	"encoding/binary"
 	"flag"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"math"
 	"math/rand"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -44,18 +46,15 @@ type Filter func(bus Bus)
 
 const sampleRate = 44100
 
-const Q = 0.7
-
-var lobuf1 float64 = 0.0
-var lobuf2 float64 = 0.0
+const Q = 10.0
 
 const reverbLen = 441000
 
 var reverbIx = 0
 var reverbBuf [reverbLen]float64
 var master_vol = 0.3
-var post_amp = 2.0
-var resFreq = 1246.0
+var post_amp = 0.3
+var global_resFreq = 1246.0
 
 var bus Bus = make([]float64, 4)
 var filters []Filter
@@ -294,12 +293,11 @@ func cmdHandle(cmd service.WsCmd) {
 		master_vol = cmd.Fparam0
 	case cmd.Action == "res_freq":
 		log.Printf("setting res_freq to %f\n", cmd.Fparam0)
-		resFreq = cmd.Fparam0
-		filters = []Filter{lopass(resFreq, Q), spread}
+		global_resFreq = cmd.Fparam0
 	case cmd.Action == "no_reverb":
-		filters = []Filter{lopass(resFreq, Q), spread}
+		filters = []Filter{lopass(global_resFreq, Q), spread}
 	case cmd.Action == "reverb":
-		filters = []Filter{lopass(resFreq, Q), reverb, spread}
+		filters = []Filter{lopass(global_resFreq, Q), reverb, spread}
 	}
 }
 
@@ -365,7 +363,35 @@ func main() {
 	// 	}
 	// }()
 
-	filters = []Filter{overdrive, lopass(resFreq, Q), reverb, spread}
+	filters = []Filter{overdrive, lopass(global_resFreq, Q), reverb, spread}
+
+	go func() {
+		uf, err := os.Open("/dev/cu.usbmodem1411")
+		bf := bufio.NewReader(uf)
+		if err != nil {
+			fmt.Printf("err: %s\n", err)
+			return
+		}
+
+		for {
+			line, err := bf.ReadString('\n')
+			if err != nil {
+				fmt.Printf("err: %s\n", err)
+				continue
+			}
+			val, err := strconv.ParseFloat(line[0:len(line)-2], 64)
+			if err != nil {
+				fmt.Printf("err: %s\n", err)
+				continue
+			}
+
+			mutex.Lock()
+			global_resFreq = 5.0*val + 100.0
+			fmt.Printf("val: %f\n", global_resFreq)
+			mutex.Unlock()
+
+		}
+	}()
 
 	go func() {
 		for {
@@ -384,24 +410,34 @@ func main() {
 // some filters
 func overdrive(bus Bus) {
 	LIMIT := 0.01
-	w := bus[0]
+	w := bus[0] * 2
 	if math.Abs(w) > LIMIT {
+		var sign float64
 		if w > 0 {
-			w = LIMIT
+			sign = 1
 		} else {
-			w = -LIMIT
+			sign = -1
 		}
+		w = sign * ((math.Abs(w)-LIMIT)/10.0 + LIMIT)
 	}
 	bus[0] = w
 }
 
+func getResFreq() float64 {
+	return global_resFreq
+}
+
 func lopass(resFreq float64, Q float64) Filter {
+	var lobuf1 float64 = 0.0
+	var lobuf2 float64 = 0.0
+
 	// Compute some params for the low-pass
-	S := sampleRate / (2 * math.Pi * resFreq)
-	A := -(S/Q + 2.0*S*S) / (1.0 + S/Q + S*S)
-	B := (S * S) / (1.0 + S/Q + S*S)
-	C := 10.0 / (1.0 + S/Q + S*S)
 	return func(bus Bus) {
+		S := sampleRate / (2 * math.Pi * getResFreq())
+		A := -(S/Q + 2.0*S*S) / (1.0 + S/Q + S*S)
+		B := (S * S) / (1.0 + S/Q + S*S)
+		C := 10.0 / (1.0 + S/Q + S*S)
+
 		w := bus[0]
 		lo_out := C*w - A*lobuf1 - B*lobuf2
 		lobuf2 = lobuf1
