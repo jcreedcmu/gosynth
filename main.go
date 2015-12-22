@@ -44,7 +44,7 @@ type Filter func(bus Bus)
 
 const sampleRate = 44100
 
-const Q = 0.7
+const BQ = 5.7
 
 var lobuf1 float64 = 0.0
 var lobuf2 float64 = 0.0
@@ -53,9 +53,9 @@ const reverbLen = 441000
 
 var reverbIx = 0
 var reverbBuf [reverbLen]float64
-var master_vol = 0.3
-var post_amp = 2.0
-var resFreq = 1246.0
+var master_vol = 1.0
+var post_amp = 0.3
+var resFreq = 546.2
 
 var bus Bus = make([]float64, 4)
 var filters []Filter
@@ -295,11 +295,11 @@ func cmdHandle(cmd service.WsCmd) {
 	case cmd.Action == "res_freq":
 		log.Printf("setting res_freq to %f\n", cmd.Fparam0)
 		resFreq = cmd.Fparam0
-		filters = []Filter{lopass(resFreq, Q), spread}
+		filters = []Filter{lopass(resFreq, BQ), spread}
 	case cmd.Action == "no_reverb":
-		filters = []Filter{lopass(resFreq, Q), spread}
+		filters = []Filter{lopass(resFreq, BQ), spread}
 	case cmd.Action == "reverb":
-		filters = []Filter{lopass(resFreq, Q), reverb, spread}
+		filters = []Filter{lopass(resFreq, BQ), reverb, spread}
 	}
 }
 
@@ -365,7 +365,8 @@ func main() {
 	// 	}
 	// }()
 
-	filters = []Filter{overdrive, lopass(resFreq, Q), reverb, spread}
+	filters = []Filter{overdrive, lopass(resFreq, BQ), reverb, spread}
+	//	filters = []Filter{spread}
 
 	go func() {
 		for {
@@ -383,7 +384,7 @@ func main() {
 
 // some filters
 func overdrive(bus Bus) {
-	LIMIT := 0.01
+	LIMIT := 0.05
 	w := bus[0]
 	if math.Abs(w) > LIMIT {
 		if w > 0 {
@@ -395,13 +396,20 @@ func overdrive(bus Bus) {
 	bus[0] = w
 }
 
+var lopass_phase = 0.0
+
 func lopass(resFreq float64, Q float64) Filter {
 	// Compute some params for the low-pass
-	S := sampleRate / (2 * math.Pi * resFreq)
-	A := -(S/Q + 2.0*S*S) / (1.0 + S/Q + S*S)
-	B := (S * S) / (1.0 + S/Q + S*S)
-	C := 10.0 / (1.0 + S/Q + S*S)
 	return func(bus Bus) {
+		_, lopass_phase = math.Modf(lopass_phase + 1.5/sampleRate)
+		rf := resFreq * (1 + 0.2*math.Sin(2.0*3.142*lopass_phase))
+
+		S := sampleRate / (2 * math.Pi * rf)
+		Q := BQ
+		A := -(S/Q + 2.0*S*S) / (1.0 + S/Q + S*S)
+		B := (S * S) / (1.0 + S/Q + S*S)
+		C := 10.0 / (1.0 + S/Q + S*S)
+
 		w := bus[0]
 		lo_out := C*w - A*lobuf1 - B*lobuf2
 		lobuf2 = lobuf1
@@ -416,11 +424,11 @@ func lopass(resFreq float64, Q float64) Filter {
 func reverb(bus Bus) {
 	reverbIx = (reverbIx + reverbLen - 1) % reverbLen
 	reverbBuf[reverbIx] = bus[0] +
-		wrapReverb(8932)*0.15 +
-		wrapReverb(5943)*0.2 +
-		wrapReverb(653)*0.025 +
-		wrapReverb(552)*0.025 +
-		wrapReverb(54)*0.05
+		wrapReverb(10932)*0.15 +
+		wrapReverb(12943)*0.2 +
+		wrapReverb(5053)*0.025 +
+		wrapReverb(4052)*0.025 +
+		wrapReverb(24)*0.05
 	bus[0] = post_amp * reverbBuf[reverbIx]
 }
 
@@ -434,6 +442,7 @@ func spread(bus Bus) {
 type Sqr struct {
 	t          int64
 	step       float64
+	freq       float64
 	phase      float64
 	step2      float64
 	phase2     float64
@@ -453,9 +462,11 @@ func (g *Sqr) signal() (float64, bool) {
 	amp := g.amp * master_vol * env
 	g.t++
 
-	v := 0.6 * sqr(g.phase)
-	v += 0.8 * saw(g.phase2)
-	_, g.phase = math.Modf(g.phase + g.step)
+	//	freq := g.freq + g.freq*math.Sin(2.0*3.142*g.phase2)
+	freq := g.freq + g.freq*0.5*sqr(g.phase2)
+	step := freq / sampleRate
+	v := 0.6 * math.Sin(2.0*3.142*g.phase)
+	_, g.phase = math.Modf(g.phase + step)
 	_, g.phase2 = math.Modf(g.phase2 + g.step2)
 
 	return v * amp, kill
@@ -478,9 +489,10 @@ func (g *Sqr) setParam(name string, val interface{}) {
 		pitch := val.(int)
 		g.cur = pitch
 		freq := (440 * math.Pow(2, float64(pitch-69)/12))
+		g.freq = freq * 4.0
 		g.step = freq / sampleRate
-		freq2 := (881 * math.Pow(2, float64(pitch-69)/12))
-		g.step2 = (freq2 + 0.3) / sampleRate
+		freq2 := freq
+		g.step2 = freq2 / sampleRate
 	case "amp":
 		g.amp = val.(float64)
 	case "savedEnv":
