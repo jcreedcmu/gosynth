@@ -53,9 +53,9 @@ const reverbLen = 441000
 
 var reverbIx = 0
 var reverbBuf [reverbLen]float64
-var master_vol = 1.0
+var master_vol = 2.0
 var post_amp = 0.3
-var resFreq = 546.2
+var resFreq = 2546.2
 
 var bus Bus = make([]float64, 4)
 var filters []Filter
@@ -119,10 +119,10 @@ func (oscs Oscs) noteOn(which int, vel int64) {
 		// alloc new note
 		osc = &Sqr{
 			Envelope: Envelope{
-				Attack:  500,
-				Decay:   500,
-				Sustain: 0.5,
-				Release: 1000,
+				Attack:  200,
+				Decay:   600,
+				Sustain: 0.4,
+				Release: 3000,
 				Falloff: 0.000015,
 			},
 		}
@@ -203,14 +203,15 @@ var innerCount int64
 var percOdom int
 var percs Oscs = Oscs(make(map[int]Osc))
 
-var drumBuf []float64
+var snareBuf []float64
+var bassBuf []float64
 
-func playDrum(freq int, amp float64) {
+func playDrum(buf []float64, amp float64) {
 	percOdom++
 	drum := &Drum{
-		freq: freq,
-		buf:  drumBuf,
-		amp:  0.3 * amp,
+		freq: 1.0,
+		buf:  buf,
+		amp:  10.0 * amp,
 		Envelope: Envelope{
 			Attack:  1000,
 			Decay:   10000,
@@ -308,15 +309,45 @@ func main() {
 	addr := flag.String("addr", "localhost:8080", "http service address")
 	flag.Parse()
 
-	drumBuf = make([]float64, 40000)
-	for i := range drumBuf {
-		if i%30 == 0 {
-			drumBuf[i] = rand.Float64()*2 - 1
-		} else {
-			drumBuf[i] = drumBuf[i-1]
+	snareBuf = make([]float64, 60000)
+	{
+		drumPhase := 0.0
+		for i := range snareBuf {
+			t := float64(i)
+			snareBuf[i] = (rand.Float64() - 0.5) * math.Exp(-t/1500.0) * 0.2
+			bot := 40.0
+			top := 200.0
+			falling := top - (top-bot)*(t/2000.0)
+			if falling < bot {
+				falling = bot
+			}
+			fr := falling * (1.0 + math.Sin(2.0*3.14159*30.0*t/44100.0))
+			drumPhase += 2.0 * 3.14159 * fr / 44100.0
+			snareBuf[i] += math.Sin(drumPhase) * 0.2 * math.Exp(-t/1000.0)
+			snareBuf[i] += math.Sin(2.0*3.14159*137.0/44100.0*t) * 0.1 * math.Exp(-t/1500.0)
 		}
 	}
 
+	bassBuf = make([]float64, 60000)
+	{
+		drumPhase := 0.0
+		for i := range bassBuf {
+			t := float64(i)
+			bot := 40.0
+			top := 120.0
+			falling := top - (top-bot)*(t/1000.0)
+			if falling < bot {
+				falling = bot
+			}
+			fr := falling * (1.0 + math.Sin(2.0*3.14159*35.0*t/44100.0))
+			drumPhase += 2.0 * 3.14159 * fr / 44100.0
+			bassBuf[i] = math.Sin(drumPhase) * 0.1
+			hold := 2000.0
+			if t > hold {
+				bassBuf[i] *= math.Exp(-(t - hold) / 1500.0)
+			}
+		}
+	}
 	portaudio.Initialize()
 	defer portaudio.Terminate()
 
@@ -350,20 +381,18 @@ func main() {
 		defer portmidi.Terminate()
 	}
 
-	// go func() {
-	// 	for {
-	// 		playDrum(1, 1.0)
-	// 		time.Sleep(700 * time.Millisecond)
-	// 		playDrum(103, 1.0)
-	// 		time.Sleep(700 * time.Millisecond)
-	// 		playDrum(1, 1.0)
-	// 		time.Sleep(350 * time.Millisecond)
-	// 		playDrum(2, 0.7)
-	// 		time.Sleep(350 * time.Millisecond)
-	// 		playDrum(103, 1.0)
-	// 		time.Sleep(700 * time.Millisecond)
-	// 	}
-	// }()
+	go func() {
+		for {
+			playDrum(bassBuf, 1.0)
+			time.Sleep(700 * time.Millisecond)
+			playDrum(snareBuf, 1.0)
+			time.Sleep(700 * time.Millisecond)
+			playDrum(bassBuf, 1.0)
+			time.Sleep(700 * time.Millisecond)
+			playDrum(snareBuf, 1.0)
+			time.Sleep(700 * time.Millisecond)
+		}
+	}()
 
 	filters = []Filter{overdrive, lopass(resFreq, BQ), reverb, spread}
 	//	filters = []Filter{spread}
@@ -425,9 +454,9 @@ func reverb(bus Bus) {
 	reverbIx = (reverbIx + reverbLen - 1) % reverbLen
 	reverbBuf[reverbIx] = bus[0] +
 		wrapReverb(10932)*0.15 +
-		wrapReverb(12943)*0.2 +
 		wrapReverb(5053)*0.025 +
 		wrapReverb(4052)*0.025 +
+		wrapReverb(143)*0.2 +
 		wrapReverb(24)*0.05
 	bus[0] = post_amp * reverbBuf[reverbIx]
 }
@@ -539,7 +568,7 @@ func (g *Drum) signal() (float64, bool) {
 	amp := master_vol * env
 
 	v := g.amp * g.buf[g.t]
-	g.t += g.freq
+	g.t += 1
 	if g.t >= len(g.buf) {
 		g.t -= len(g.buf)
 	}
