@@ -53,9 +53,9 @@ const reverbLen = 441000
 
 var reverbIx = 0
 var reverbBuf [reverbLen]float64
-var master_vol = 2.0
-var post_amp = 0.3
-var resFreq = 2546.2
+var master_vol = 1.0
+var post_amp = 0.05
+var resFreq = 2646.2
 
 var bus Bus = make([]float64, 4)
 var filters []Filter
@@ -244,7 +244,7 @@ func processAudio(out [][]float32) {
 		}
 		for i, osc := range percs {
 			s, kill := osc.signal()
-			bus[0] += s
+			bus[2] += s
 			if kill {
 				delete(percs, i)
 				continue
@@ -333,18 +333,18 @@ func main() {
 		drumPhase := 0.0
 		for i := range bassBuf {
 			t := float64(i)
-			bot := 40.0
+			bot := 30.0
 			top := 120.0
-			falling := top - (top-bot)*(t/1000.0)
+			falling := top - (top-bot)*(t/3500.0)
 			if falling < bot {
 				falling = bot
 			}
-			fr := falling * (1.0 + math.Sin(2.0*3.14159*35.0*t/44100.0))
+			fr := falling * (1.0 + 0.5*math.Sin(2.0*3.14159*25.0*t/44100.0))
 			drumPhase += 2.0 * 3.14159 * fr / 44100.0
 			bassBuf[i] = math.Sin(drumPhase) * 0.1
-			hold := 2000.0
+			hold := 1000.0
 			if t > hold {
-				bassBuf[i] *= math.Exp(-(t - hold) / 1500.0)
+				bassBuf[i] *= math.Exp(-(t - hold) / 2500.0)
 			}
 		}
 	}
@@ -382,19 +382,41 @@ func main() {
 	}
 
 	go func() {
+		amp := 1.0
+		tempo := 800 * time.Microsecond
 		for {
-			playDrum(bassBuf, 1.0)
-			time.Sleep(700 * time.Millisecond)
-			playDrum(snareBuf, 1.0)
-			time.Sleep(700 * time.Millisecond)
-			playDrum(bassBuf, 1.0)
-			time.Sleep(700 * time.Millisecond)
-			playDrum(snareBuf, 1.0)
-			time.Sleep(700 * time.Millisecond)
+			playDrum(bassBuf, amp)
+			time.Sleep(600 * tempo)
+			playDrum(snareBuf, amp)
+			time.Sleep(300 * tempo)
+			playDrum(bassBuf, amp)
+			time.Sleep(600 * tempo)
+			playDrum(bassBuf, amp)
+			time.Sleep(300 * tempo)
+			playDrum(snareBuf, amp)
+			time.Sleep(300 * tempo)
+			playDrum(bassBuf, amp*0.5)
+			time.Sleep(170 * tempo)
+			playDrum(snareBuf, amp*0.1)
+			time.Sleep(65 * tempo)
+			playDrum(snareBuf, amp*0.1)
+			time.Sleep(65 * tempo)
+
+			playDrum(bassBuf, amp)
+			time.Sleep(600 * tempo)
+			playDrum(snareBuf, amp)
+			time.Sleep(300 * tempo)
+			playDrum(bassBuf, amp)
+			time.Sleep(600 * tempo)
+			playDrum(bassBuf, amp)
+			time.Sleep(300 * tempo)
+			playDrum(snareBuf, amp)
+			time.Sleep(600 * tempo)
+
 		}
 	}()
 
-	filters = []Filter{overdrive, lopass(resFreq, BQ), reverb, spread}
+	filters = []Filter{overdrive(0, 0.05), overdrive(2, 0.2), join, reverb, lopass(resFreq, BQ), spread}
 	//	filters = []Filter{spread}
 
 	go func() {
@@ -412,17 +434,18 @@ func main() {
 }
 
 // some filters
-func overdrive(bus Bus) {
-	LIMIT := 0.05
-	w := bus[0]
-	if math.Abs(w) > LIMIT {
-		if w > 0 {
-			w = LIMIT
-		} else {
-			w = -LIMIT
+func overdrive(n int, LIMIT float64) func(bus Bus) {
+	return func(bus Bus) {
+		w := bus[n]
+		if math.Abs(w) > LIMIT {
+			if w > 0 {
+				w = LIMIT
+			} else {
+				w = -LIMIT
+			}
 		}
+		bus[n] = w
 	}
-	bus[0] = w
 }
 
 var lopass_phase = 0.0
@@ -430,9 +453,9 @@ var lopass_phase = 0.0
 func lopass(resFreq float64, Q float64) Filter {
 	// Compute some params for the low-pass
 	return func(bus Bus) {
-		_, lopass_phase = math.Modf(lopass_phase + 1.5/sampleRate)
-		rf := resFreq * (1 + 0.2*math.Sin(2.0*3.142*lopass_phase))
-
+		// _, lopass_phase = math.Modf(lopass_phase + 0.1/sampleRate)
+		// rf := resFreq * (1 + 0.5*math.Sin(2.0*3.142*lopass_phase))
+		rf := resFreq
 		S := sampleRate / (2 * math.Pi * rf)
 		Q := BQ
 		A := -(S/Q + 2.0*S*S) / (1.0 + S/Q + S*S)
@@ -453,7 +476,7 @@ func lopass(resFreq float64, Q float64) Filter {
 func reverb(bus Bus) {
 	reverbIx = (reverbIx + reverbLen - 1) % reverbLen
 	reverbBuf[reverbIx] = bus[0] +
-		wrapReverb(10932)*0.15 +
+		wrapReverb(2932)*0.15 +
 		wrapReverb(5053)*0.025 +
 		wrapReverb(4052)*0.025 +
 		wrapReverb(143)*0.2 +
@@ -464,6 +487,11 @@ func reverb(bus Bus) {
 // spread
 func spread(bus Bus) {
 	bus[1] = bus[0]
+}
+
+// spread
+func join(bus Bus) {
+	bus[0] += bus[2]
 }
 
 // Basic tone generator
@@ -492,9 +520,12 @@ func (g *Sqr) signal() (float64, bool) {
 	g.t++
 
 	//	freq := g.freq + g.freq*math.Sin(2.0*3.142*g.phase2)
+	//	freq := g.freq + g.freq*saw(g.phase2)
 	freq := g.freq + g.freq*0.5*sqr(g.phase2)
 	step := freq / sampleRate
-	v := 0.6 * math.Sin(2.0*3.142*g.phase)
+
+	v := 0.7 * math.Sin(6.284*g.phase)
+	// v := 0.7 * saw(g.phase)
 	_, g.phase = math.Modf(g.phase + step)
 	_, g.phase2 = math.Modf(g.phase2 + g.step2)
 
@@ -518,7 +549,7 @@ func (g *Sqr) setParam(name string, val interface{}) {
 		pitch := val.(int)
 		g.cur = pitch
 		freq := (440 * math.Pow(2, float64(pitch-69)/12))
-		g.freq = freq * 4.0
+		g.freq = freq * 2.0
 		g.step = freq / sampleRate
 		freq2 := freq
 		g.step2 = freq2 / sampleRate
