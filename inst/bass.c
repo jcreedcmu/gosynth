@@ -36,7 +36,7 @@ int run(void *instance, double **param, double *out, int len) {
     return 1;
   }
   else {
-    *out += env * rv;
+    *out += env * amp * rv;
     return 0;
   }
 }

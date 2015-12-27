@@ -123,7 +123,7 @@ func (oscs Oscs) noteOn(which int, vel int64) {
 	} else {
 		// alloc new note
 		freq := 440 * math.Pow(2, float64(which-69)/12)
-		amp := 0.3
+		amp := 0.08
 		bleeps[which] = &PedalBleep{
 			pedal_hold: false,
 			ui:         ugens["midi"].Create(),
@@ -404,7 +404,7 @@ func Run() {
 
 	if true {
 		go func() {
-			amp := 1.0
+			amp := 0.1
 			tempo := 1500 * time.Microsecond
 			for {
 				playDrum("bass", []*float64{&amp})
