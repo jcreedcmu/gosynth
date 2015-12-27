@@ -204,8 +204,20 @@ var innerCount int64
 var percOdom int
 var percs Oscs = Oscs(make(map[int]Osc))
 
+var bleepOdom int
+var bleeps map[int]*Ugens = make(map[int]*Ugens)
+
 var snareBuf []float64
 var bassBuf []float64
+
+func playBleep(ug *ugen.Ugen, freq float64, amp float64) {
+	bleepOdom++
+	bleep := &Ugens{
+		ui:    ug.Create(),
+		param: []*float64{&freq, &amp},
+	}
+	bleeps[bleepOdom] = bleep
+}
 
 func playDrum(buf []float64, amp float64) {
 	percOdom++
@@ -263,7 +275,13 @@ func processAudio(out [][]float32) {
 		out64[1][i] = bus[1]
 	}
 
-	bleepGen.batchSignal(out64[0])
+	for i, osc := range bleeps {
+		kill := osc.batchSignal(out64[0])
+		if kill {
+			delete(bleeps, i)
+			continue
+		}
+	}
 
 	for i := range out64[0] {
 		out[0][i] = float32(out64[0][i])
@@ -317,19 +335,11 @@ func cmdHandle(cmd service.WsCmd) {
 	}
 }
 
-var bleepGen *Ugens
-
 func Run() {
 	bassUgen, err := ugen.Load("./ugen/bass.so")
 	chk(err)
 
-	var freq float64 = 290.0
-	var amp float64 = 0.3
-
-	bleepGen = &Ugens{
-		ui:    bassUgen.Create(),
-		param: []*float64{&freq, &amp},
-	}
+	playBleep(bassUgen, 290, 0.3)
 
 	shouldRecord := flag.Bool("record", false, "whether to record")
 	addr := flag.String("addr", "localhost:8080", "http service address")
