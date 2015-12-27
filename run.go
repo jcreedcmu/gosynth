@@ -254,7 +254,7 @@ func processAudio(out [][]float32) {
 
 	for i := range out64[0] {
 		out[0][i] = float32(out64[0][i])
-		out[1][i] = float32(out64[1][i])
+		out[1][i] = float32(out64[0][i])
 	}
 
 	if f != nil {
