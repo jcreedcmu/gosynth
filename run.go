@@ -322,6 +322,10 @@ func Run() {
 	chk(err)
 	ugens["bass"] = bassUgen
 
+	snareUgen, err := ugen.Load("./inst/snare.so")
+	chk(err)
+	ugens["snare"] = snareUgen
+
 	shouldRecord := flag.Bool("record", false, "whether to record")
 	addr := flag.String("addr", "localhost:8080", "http service address")
 	flag.Parse()
@@ -401,10 +405,12 @@ func Run() {
 	if true {
 		go func() {
 			amp := 1.0
-			tempo := 1000 * time.Microsecond
+			tempo := 1500 * time.Microsecond
 			for {
 				playDrum("bass", []*float64{&amp})
-				time.Sleep(600 * tempo)
+				time.Sleep(300 * tempo)
+				playDrum("snare", []*float64{&amp})
+				time.Sleep(300 * tempo)
 			}
 		}()
 	}
