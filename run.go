@@ -118,18 +118,21 @@ func (oscs Oscs) noteOn(which int, vel int64) {
 	osc, ok := bleeps[which]
 	if ok {
 		// reuse old note
-		osc.ui.Msg(RESTART)
+		osc.ug.ui.Msg(RESTART)
+		osc.pedal_hold = false
 	} else {
 		// alloc new note
 		freq := 440 * math.Pow(2, float64(which-69)/12)
 		amp := 0.3
-		bleep := &Ugens{
-			ui:    ugens["bleep"].Create(),
-			param: []*float64{&freq, &amp},
+		bleeps[which] = &PedalBleep{
+			pedal_hold: false,
+			ug: &Ugens{
+				ui:    ugens["bleep"].Create(),
+				param: []*float64{&freq, &amp},
+			},
 		}
-		bleeps[which] = bleep
 	}
-	//	osc.setParam("pedal_hold", false) // XXX wrap pedal data
+
 }
 
 func (oscs Oscs) noteOff(which int) {
@@ -139,10 +142,9 @@ func (oscs Oscs) noteOff(which int) {
 	osc, ok := bleeps[which]
 	if ok {
 		if pedal {
-			//	osc.setParam("pedal_hold", true) // XXX wrap pedal data
+			osc.pedal_hold = true
 		} else {
-			fmt.Printf("STOPPING %d\n", which)
-			osc.ui.Msg(STOP)
+			osc.ug.ui.Msg(STOP)
 		}
 	}
 }
@@ -158,10 +160,10 @@ func (oscs Oscs) pedalOff() {
 	defer mutex.Unlock()
 
 	pedal = false
-	for _, osc := range oscs {
-		if osc != nil && osc.getParam("pedal_hold").(bool) {
-			osc.setParam("pedal_hold", false)
-			osc.Stop()
+	for _, osc := range bleeps {
+		if osc.pedal_hold {
+			osc.pedal_hold = false
+			osc.ug.ui.Msg(STOP)
 		}
 	}
 }
@@ -201,21 +203,16 @@ var innerCount int64
 var percOdom int
 var percs Oscs = Oscs(make(map[int]Osc))
 
-var bleepOdom int
-var bleeps map[int]*Ugens = make(map[int]*Ugens)
+type PedalBleep struct {
+	pedal_hold bool
+	ug         *Ugens
+}
+
+var bleeps = make(map[int]*PedalBleep)
 var ugens = make(map[string]*ugen.Ugen)
 
 var snareBuf []float64
 var bassBuf []float64
-
-func playBleep(ugName string, freq float64, amp float64) {
-	bleepOdom++
-	bleep := &Ugens{
-		ui:    ugens[ugName].Create(),
-		param: []*float64{&freq, &amp},
-	}
-	bleeps[bleepOdom] = bleep
-}
 
 func playDrum(buf []float64, amp float64) {
 	percOdom++
@@ -274,7 +271,7 @@ func processAudio(out [][]float32) {
 	}
 
 	for i, osc := range bleeps {
-		kill := osc.batchSignal(out64[0])
+		kill := osc.ug.batchSignal(out64[0])
 		if kill {
 			delete(bleeps, i)
 			continue
@@ -315,8 +312,6 @@ func openStream(cbk interface{}) (*portaudio.Stream, error) {
 func cmdHandle(cmd service.WsCmd) {
 	mutex.Lock()
 	defer mutex.Unlock()
-
-	fmt.Printf("HERE %+v\n", cmd)
 
 	switch {
 	case cmd.Action == "master_vol":

@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <math.h>
+#include <stdio.h>
 
 typedef struct {
   double phase;
@@ -11,11 +12,11 @@ typedef struct {
 #define STOP     0
 #define RESTART  1
 
-#define ATTACK  20
+#define ATTACK  400
 #define DECAY   6000
 #define SUSTAIN 0.4
-#define RELEASE 3000
-#define FALLOFF 0.000015
+#define RELEASE 6000
+#define FALLOFF 0.0000015
 
 int get_env(state_t *state, double *env) {
   double t = state->t;
@@ -56,6 +57,7 @@ void msg(void *instance, int sig) {
     break;
   case RESTART:
     get_env(state, &state->last);
+    state->t = 0;
     state->gate = 1;
     break;
   }
