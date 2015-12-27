@@ -40,9 +40,9 @@ void ugen_destroy(ugen_t u, void *instance) {
   destroy(instance);
 }
 
-void ugen_run(ugen_t u, void *instance, double *buf, int len) {
-  void (*run)(void *, double *, int) = u.run;
-  run(instance, buf, len);
+void ugen_run(ugen_t u, double **param, void *instance, double *buf, int len) {
+  void (*run)(void *, double **, double *, int) = u.run;
+  run(instance, param, buf, len);
 }
 
 void ugen_close(ugen_t u) {

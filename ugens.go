@@ -8,8 +8,8 @@ type Ugens struct {
 	ui *ugen.Uinst
 }
 
-func (g *Ugens) batchSignal(buf []float64) bool {
-	g.ui.Run(buf)
+func (g *Ugens) batchSignal(params []*float64, buf []float64) bool {
+	g.ui.Run(params, buf)
 	return false
 }
 

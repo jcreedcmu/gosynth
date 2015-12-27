@@ -263,7 +263,10 @@ func processAudio(out [][]float32) {
 		out64[1][i] = bus[1]
 	}
 
-	bleepGen.batchSignal(out64[0])
+	var freq float64 = 290.0
+	var amp float64 = 0.3
+	var param []*float64 = []*float64{&freq, &amp}
+	bleepGen.batchSignal(param, out64[0])
 
 	for i := range out64[0] {
 		out[0][i] = float32(out64[0][i])

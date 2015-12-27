@@ -36,9 +36,10 @@ func (u *Ugen) Create() *Uinst {
 	return &uinst
 }
 
-func (ui *Uinst) Run(buf []float64) {
+func (ui *Uinst) Run(param []*float64, buf []float64) {
 	C.ugen_run(
 		*((*C.ugen_t)(ui.gen)),
+		(**C.double)(unsafe.Pointer(&param[0])),
 		ui.inst,
 		(*C.double)(unsafe.Pointer(&buf[0])),
 		C.int(len(buf)),
