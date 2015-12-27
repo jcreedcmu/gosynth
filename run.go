@@ -118,7 +118,7 @@ func (oscs Oscs) noteOn(which int, vel int64) {
 	osc, ok := bleeps[which]
 	if ok {
 		// reuse old note
-		osc.ug.ui.Msg(RESTART)
+		osc.ui.Msg(RESTART)
 		osc.pedal_hold = false
 	} else {
 		// alloc new note
@@ -126,13 +126,10 @@ func (oscs Oscs) noteOn(which int, vel int64) {
 		amp := 0.3
 		bleeps[which] = &PedalBleep{
 			pedal_hold: false,
-			ug: &Ugens{
-				ui:    ugens["bleep"].Create(),
-				param: []*float64{&freq, &amp},
-			},
+			ui:         ugens["midi"].Create(),
+			param:      []*float64{&freq, &amp},
 		}
 	}
-
 }
 
 func (oscs Oscs) noteOff(which int) {
@@ -144,7 +141,7 @@ func (oscs Oscs) noteOff(which int) {
 		if pedal {
 			osc.pedal_hold = true
 		} else {
-			osc.ug.ui.Msg(STOP)
+			osc.ui.Msg(STOP)
 		}
 	}
 }
@@ -163,7 +160,7 @@ func (oscs Oscs) pedalOff() {
 	for _, osc := range bleeps {
 		if osc.pedal_hold {
 			osc.pedal_hold = false
-			osc.ug.ui.Msg(STOP)
+			osc.ui.Msg(STOP)
 		}
 	}
 }
@@ -202,11 +199,6 @@ var innerCount int64
 
 var percOdom int
 var percs Oscs = Oscs(make(map[int]Osc))
-
-type PedalBleep struct {
-	pedal_hold bool
-	ug         *Ugens
-}
 
 var bleeps = make(map[int]*PedalBleep)
 var ugens = make(map[string]*ugen.Ugen)
@@ -271,7 +263,7 @@ func processAudio(out [][]float32) {
 	}
 
 	for i, osc := range bleeps {
-		kill := osc.ug.batchSignal(out64[0])
+		kill := osc.batchSignal(out64[0])
 		if kill {
 			delete(bleeps, i)
 			continue
@@ -331,7 +323,7 @@ func cmdHandle(cmd service.WsCmd) {
 func Run() {
 	bassUgen, err := ugen.Load("./ugen/bass.so")
 	chk(err)
-	ugens["bleep"] = bassUgen
+	ugens["midi"] = bassUgen
 
 	shouldRecord := flag.Bool("record", false, "whether to record")
 	addr := flag.String("addr", "localhost:8080", "http service address")
