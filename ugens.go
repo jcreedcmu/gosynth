@@ -5,11 +5,12 @@ import (
 )
 
 type Ugens struct {
-	ui *ugen.Uinst
+	ui    *ugen.Uinst
+	param []*float64
 }
 
-func (g *Ugens) batchSignal(params []*float64, buf []float64) bool {
-	return g.ui.Run(params, buf)
+func (g *Ugens) batchSignal(buf []float64) bool {
+	return g.ui.Run(g.param, buf)
 }
 
 func (g *Ugens) signal() (float64, bool) {

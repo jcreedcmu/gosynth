@@ -263,10 +263,7 @@ func processAudio(out [][]float32) {
 		out64[1][i] = bus[1]
 	}
 
-	var freq float64 = 290.0
-	var amp float64 = 0.3
-	var param []*float64 = []*float64{&freq, &amp}
-	bleepGen.batchSignal(param, out64[0])
+	bleepGen.batchSignal(out64[0])
 
 	for i := range out64[0] {
 		out[0][i] = float32(out64[0][i])
@@ -325,7 +322,14 @@ var bleepGen *Ugens
 func Run() {
 	bassUgen, err := ugen.Load("./ugen/bass.so")
 	chk(err)
-	bleepGen = &Ugens{ui: bassUgen.Create()}
+
+	var freq float64 = 290.0
+	var amp float64 = 0.3
+
+	bleepGen = &Ugens{
+		ui:    bassUgen.Create(),
+		param: []*float64{&freq, &amp},
+	}
 
 	shouldRecord := flag.Bool("record", false, "whether to record")
 	addr := flag.String("addr", "localhost:8080", "http service address")
