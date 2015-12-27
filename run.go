@@ -198,7 +198,7 @@ var inner time.Duration
 var innerCount int64
 
 var percOdom int
-var percs Oscs = Oscs(make(map[int]Osc))
+var percs = make(map[int]*PedalBleep)
 
 var bleeps = make(map[int]*PedalBleep)
 var ugens = make(map[string]*ugen.Ugen)
@@ -206,20 +206,13 @@ var ugens = make(map[string]*ugen.Ugen)
 var snareBuf []float64
 var bassBuf []float64
 
-func playDrum(buf []float64, amp float64) {
+func playDrum(ugenName string, param []*float64) {
 	percOdom++
-	drum := &Drum{
-		freq: 1.0,
-		buf:  buf,
-		amp:  10.0 * amp,
-		Envelope: Envelope{
-			Attack:  1000,
-			Decay:   10000,
-			Sustain: 0.0,
-		},
+	percs[percOdom] = &PedalBleep{
+		pedal_hold: false,
+		ui:         ugens[ugenName].Create(),
+		param:      param,
 	}
-	drum.Start()
-	percs[percOdom] = drum
 }
 
 func processAudio(out [][]float32) {
@@ -246,14 +239,6 @@ func processAudio(out [][]float32) {
 				continue
 			}
 		}
-		for i, osc := range percs {
-			s, kill := osc.signal()
-			bus[2] += s
-			if kill {
-				delete(percs, i)
-				continue
-			}
-		}
 
 		for _, filter := range filters {
 			filter(bus)
@@ -266,6 +251,14 @@ func processAudio(out [][]float32) {
 		kill := osc.batchSignal(out64[0])
 		if kill {
 			delete(bleeps, i)
+			continue
+		}
+	}
+
+	for i, osc := range percs {
+		kill := osc.batchSignal(out64[0])
+		if kill {
+			delete(percs, i)
 			continue
 		}
 	}
@@ -405,39 +398,13 @@ func Run() {
 		defer portmidi.Terminate()
 	}
 
-	if false {
+	if true {
 		go func() {
 			amp := 1.0
-			tempo := 800 * time.Microsecond
+			tempo := 1000 * time.Microsecond
 			for {
-				playDrum(bassBuf, amp)
+				playDrum("bass", []*float64{&amp})
 				time.Sleep(600 * tempo)
-				playDrum(snareBuf, amp)
-				time.Sleep(300 * tempo)
-				playDrum(bassBuf, amp)
-				time.Sleep(600 * tempo)
-				playDrum(bassBuf, amp)
-				time.Sleep(300 * tempo)
-				playDrum(snareBuf, amp)
-				time.Sleep(300 * tempo)
-				playDrum(bassBuf, amp*0.5)
-				time.Sleep(170 * tempo)
-				playDrum(snareBuf, amp*0.1)
-				time.Sleep(65 * tempo)
-				playDrum(snareBuf, amp*0.1)
-				time.Sleep(65 * tempo)
-
-				playDrum(bassBuf, amp)
-				time.Sleep(600 * tempo)
-				playDrum(snareBuf, amp)
-				time.Sleep(300 * tempo)
-				playDrum(bassBuf, amp)
-				time.Sleep(600 * tempo)
-				playDrum(bassBuf, amp)
-				time.Sleep(300 * tempo)
-				playDrum(snareBuf, amp)
-				time.Sleep(600 * tempo)
-
 			}
 		}()
 	}
