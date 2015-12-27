@@ -11,11 +11,11 @@ int run(void *instance, double **param, double *out, int len) {
   double amp = *(param[1]);
   state_t *state = (state_t *)instance;
 
-  double env = exp(-state->t / 30000.0) - 0.001;
+  double env = exp(-state->t / 5000.0) - 0.01;
   if (env < 0)
     return 1;
   else {
-    *out += amp * sin(2.0*M_PI*state->phase) * exp(-state->t / 30000.0);
+    *out += amp * (state->phase > 0.5 ? 1 : -1) * env;
     state->t++;
     state->phase += (freq / 44100.0);
     if (state->phase > 1) state->phase--;

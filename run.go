@@ -112,42 +112,10 @@ func (oscs Oscs) noteOn(which int, vel int64) {
 	mutex.Lock()
 	defer mutex.Unlock()
 
-	osc, ok := oscs[which]
-	if ok {
-		// reuse old note
-		osc.Restart()
-	} else {
-		// alloc new note
-		osc = &Sqr{
-			Envelope: Envelope{
-				Attack:  200,
-				Decay:   600,
-				Sustain: 0.4,
-				Release: 3000,
-				Falloff: 0.000015,
-			},
-		}
-		osc.setParam("pitch", which)
-		osc.Start()
-		oscs[which] = osc
-	}
-	osc.setParam("pedal_hold", false)
-	osc.setParam("amp", 0.5/127*float64(vel))
+	playBleep("bleep", 440*math.Pow(2, float64(which-69)/12), 0.3)
 }
 
 func (oscs Oscs) noteOff(which int) {
-	mutex.Lock()
-	defer mutex.Unlock()
-
-	osc, ok := oscs[which]
-	if ok {
-		if pedal {
-			osc.setParam("pedal_hold", true)
-		} else {
-			fmt.Printf("STOPPING %d\n", which)
-			osc.Stop()
-		}
-	}
 }
 
 func (oscs Oscs) pedalOn() {
@@ -206,14 +174,15 @@ var percs Oscs = Oscs(make(map[int]Osc))
 
 var bleepOdom int
 var bleeps map[int]*Ugens = make(map[int]*Ugens)
+var ugens = make(map[string]*ugen.Ugen)
 
 var snareBuf []float64
 var bassBuf []float64
 
-func playBleep(ug *ugen.Ugen, freq float64, amp float64) {
+func playBleep(ugName string, freq float64, amp float64) {
 	bleepOdom++
 	bleep := &Ugens{
-		ui:    ug.Create(),
+		ui:    ugens[ugName].Create(),
 		param: []*float64{&freq, &amp},
 	}
 	bleeps[bleepOdom] = bleep
@@ -338,8 +307,7 @@ func cmdHandle(cmd service.WsCmd) {
 func Run() {
 	bassUgen, err := ugen.Load("./ugen/bass.so")
 	chk(err)
-
-	playBleep(bassUgen, 290, 0.3)
+	ugens["bleep"] = bassUgen
 
 	shouldRecord := flag.Bool("record", false, "whether to record")
 	addr := flag.String("addr", "localhost:8080", "http service address")
