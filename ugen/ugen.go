@@ -62,3 +62,11 @@ func (u *Ugen) Close() error {
 	}
 	return nil
 }
+
+func (ui *Uinst) Msg(sig int) {
+	C.ugen_msg(
+		*((*C.ugen_t)(ui.gen)),
+		ui.inst,
+		C.int(sig),
+	)
+}

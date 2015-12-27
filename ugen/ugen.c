@@ -27,6 +27,10 @@ ugen_t ugen_load(char *filename) {
   err = dlerror();
   if (err) return u;
 
+  u.msg = dlsym(u.handle, "msg");
+  err = dlerror();
+  if (err) return u;
+
   return u;
 }
 
@@ -49,6 +53,11 @@ int ugen_run(ugen_t u, double **param, void *instance, double *buf, int len) {
     }
   }
   return 0;
+}
+
+void ugen_msg(ugen_t u, void *instance, int sig) {
+  int (*msg)(void *, int) = u.msg;
+  msg(instance, sig);
 }
 
 void ugen_close(ugen_t u) {

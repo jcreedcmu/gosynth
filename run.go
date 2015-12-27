@@ -108,14 +108,43 @@ var f *os.File
 var mutex = &sync.Mutex{}
 var pedal = false
 
+const STOP = 0
+const RESTART = 1
+
 func (oscs Oscs) noteOn(which int, vel int64) {
 	mutex.Lock()
 	defer mutex.Unlock()
 
-	playBleep("bleep", 440*math.Pow(2, float64(which-69)/12), 0.3)
+	osc, ok := bleeps[which]
+	if ok {
+		// reuse old note
+		osc.ui.Msg(RESTART)
+	} else {
+		// alloc new note
+		freq := 440 * math.Pow(2, float64(which-69)/12)
+		amp := 0.3
+		bleep := &Ugens{
+			ui:    ugens["bleep"].Create(),
+			param: []*float64{&freq, &amp},
+		}
+		bleeps[which] = bleep
+	}
+	//	osc.setParam("pedal_hold", false) // XXX wrap pedal data
 }
 
 func (oscs Oscs) noteOff(which int) {
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	osc, ok := bleeps[which]
+	if ok {
+		if pedal {
+			//	osc.setParam("pedal_hold", true) // XXX wrap pedal data
+		} else {
+			fmt.Printf("STOPPING %d\n", which)
+			osc.ui.Msg(STOP)
+		}
+	}
 }
 
 func (oscs Oscs) pedalOn() {
