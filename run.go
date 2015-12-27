@@ -321,9 +321,13 @@ func cmdHandle(cmd service.WsCmd) {
 }
 
 func Run() {
-	bassUgen, err := ugen.Load("./ugen/bass.so")
+	leadUgen, err := ugen.Load("./inst/lead.so")
 	chk(err)
-	ugens["midi"] = bassUgen
+	ugens["midi"] = leadUgen
+
+	bassUgen, err := ugen.Load("./inst/bass.so")
+	chk(err)
+	ugens["bass"] = bassUgen
 
 	shouldRecord := flag.Bool("record", false, "whether to record")
 	addr := flag.String("addr", "localhost:8080", "http service address")
