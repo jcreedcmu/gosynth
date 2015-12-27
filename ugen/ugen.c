@@ -40,9 +40,15 @@ void ugen_destroy(ugen_t u, void *instance) {
   destroy(instance);
 }
 
-void ugen_run(ugen_t u, double **param, void *instance, double *buf, int len) {
-  void (*run)(void *, double **, double *, int) = u.run;
-  run(instance, param, buf, len);
+int ugen_run(ugen_t u, double **param, void *instance, double *buf, int len) {
+  int (*run)(void *, double **, double *, int) = u.run;
+  int kill = 0;
+  for (int i = 0; i < len; i++) {
+    if (run(instance, param, &(buf[i]), len)) {
+      return 1;
+    }
+  }
+  return 0;
 }
 
 void ugen_close(ugen_t u) {
