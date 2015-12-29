@@ -245,7 +245,8 @@ func UnloadUgen(name string) {
 }
 
 func Run() {
-	chk(LoadUgen("./inst/lead.so", "midi"))
+	chk(LoadUgen("./inst/lead2.so", "midi"))
+	chk(LoadUgen("./inst/lead.so", "lead"))
 	chk(LoadUgen("./inst/bass.so", "bass"))
 	chk(LoadUgen("./inst/snare.so", "snare"))
 

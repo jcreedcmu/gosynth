@@ -1,4 +1,4 @@
-var replatch = "5sbk1l02e0ftaa7g0hjci0r1w1231f1000d1210c0100h0060v0001o3200b4zhmu1EQlDAi000id5pUCILg4zgielpUlDwi1xkl528y8yclp28FFzxgc0CvdgQPlMINU5U3F33hNCalRVKinGqT7Oiq_1eHEYW7yMBt3MQs2LakwFFWVaq6aC6zp8uQ1FBTpQ3wlenlQetw-0jjWjfCHxPI7o7eQ-5noxTePqD7X66HxPEpg1UiCzE-anxev3y6nyI3n01F3g7Kac-IldHQQmjkSvzg8hiaL6Noz60jFIu6Cu0CfaqLtdfWG3FMcF0Ou4AReY_0efjhYINV5SXFaCGOPLsHJjTBk7rwldbzhiNdjziUCFNIn-ZVTTyxGljzg-4kUOUXzkMXFV-iTGr6koWCNX6AChO5jnPkR9uL2oaoUoq0Q9xNhgb83g6z81A1O8q0V0aacz81A1O0kkkkk0EE3N4d0q0p6hA0O0Q1E3g79xE3g6wdwkM8Ei3yyyxf7zvv9bQz2C9Nlc2hk2F4Q4A2vXmM30sA6hA0OgQV0cDbLOYw5tld7aOacz81w6g30cw6phrgCC0k0dEEEh0yyyyyyyx82brruuIjcDeEXOyyzBAusEEES-oSadz8EEOx8Cjp9Xt556RN6NhIp550-8G00";
+var song_data = "5sbk5l00e0ft7a7g0fj7i0r1w8411f0010d0021c0200h0000v0000o4320b0000018Q5Dwid1pU4zgmu18i4x8Qd3gQcP8h51ki4h8p24zFDN0Mc6CDVlOQNVjhVP91dz4v5lSnsZDO78OBdzPbsTDuFPF1jgO4syDyGq_6nTDkYRFjlWkQYP2tcZa1GwkRY5cuqKTp8Gr7CjOaGX4Q_s3LV6nJYWWWPDepGXtBWCDC9r5eRkQI2cyLL4QuuqQGqKKijFDFgHcYfsmJIO-OIH1Voml9mU7-lCu6JC20HwGsH1RQTSnQxkNkjGBc58hwaCapqC2160pWC2hig4k9yhvqF0wsC1tnp8R4qydN6jONl0E1q2w41hhh0kkkmQkkv7rKKXGxj54-U0" // kin madje (the reasonable)
 
 $(go);
 
@@ -70,7 +70,7 @@ function go() {
       type: "POST",
       contentType: "text/plain",
       processData: false,
-      data : replatch,
+      data: song_data,
       success: function(data, status, req) {
         playBeeps(data);
       },
@@ -114,9 +114,9 @@ function playBeeps(data) {
                             args: {
                               on: true,
                               id: id_odom,
-                              ugenName: "midi",
+                              ugenName: "lead",
                               vel: 10,
-                              pitch: note + 36,
+                              pitch: note + 24,
                             }}]);
               agenda.push([bar * 32 + tone.end,
                            {action: "note",
@@ -150,6 +150,6 @@ function play_agenda(agenda, ix) {
     var dt = agenda[ix+1][0] - time;
     setTimeout(function() {
       play_agenda(agenda, ix+1);
-    }, dt * 50);
+    }, dt * 75);
   }
 }

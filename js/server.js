@@ -4,7 +4,7 @@ var ws = require('websocket');
 var proc = require('child_process');
 var song = require('./beepbox/song');
 
-var mk = proc.spawn('make');
+var mk = proc.spawn('make', process.argv.slice(2));
 mk.on('message', function(x) {
   console.log(x);
 });
