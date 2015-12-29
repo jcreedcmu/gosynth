@@ -10,33 +10,10 @@ import (
 	"github.com/gordonklaus/portaudio"
 	"github.com/rakyll/portmidi"
 	"math"
-	"math/rand"
 	"os"
 	"sync"
 	"time"
 )
-
-type Unit struct{}
-type Osc interface {
-	signal() (float64, bool)
-	setParam(string, interface{})
-	getParam(string) interface{}
-	Start()
-	Stop()
-	Restart()
-	getEnv() (float64, bool)
-}
-
-type Envelope struct {
-	Attack  int64
-	Decay   int64
-	Sustain float64
-	Release int64
-	lastEnv float64
-	Falloff float64
-	t       int64
-	gate    bool
-}
 
 type Bus []float64
 type Filter func(bus Bus)
@@ -58,49 +35,6 @@ var resFreq = 2646.2
 
 var bus Bus = make([]float64, 4)
 var filters []Filter
-
-func (e *Envelope) getEnv() (float64, bool) {
-	t := e.t
-	e.t++
-	if e.gate {
-		if t < e.Attack {
-			phase := float64(t) / float64(e.Attack)
-			return (1.0-phase)*e.lastEnv + phase, false
-		}
-		pat := float64(t - e.Attack)
-		if pat < float64(e.Decay) {
-			phase := pat / float64(e.Decay)
-			return (1.0 - phase) + phase*e.Sustain, false
-		}
-		if e.Sustain > 0.0 {
-			return e.Sustain * math.Exp(-e.Falloff*float64(t-e.Attack-e.Decay)), false
-		}
-	} else {
-		phase := float64(t) / float64(e.Release)
-		if phase < 1 {
-			return (1.0-phase)*e.lastEnv + phase*0.0, false
-		}
-	}
-	return 0.0, true
-}
-
-func (e *Envelope) Start() {
-	e.lastEnv = 0
-	e.gate = true
-	e.t = 0
-}
-
-func (e *Envelope) Restart() {
-	e.lastEnv, _ = e.getEnv()
-	e.gate = true
-	e.t = 0
-}
-
-func (e *Envelope) Stop() {
-	e.lastEnv, _ = e.getEnv()
-	e.gate = false
-	e.t = 0
-}
 
 var f *os.File
 var mutex = &sync.Mutex{}
@@ -201,9 +135,6 @@ type Bleeps map[int]*PedalBleep
 
 var bleeps = Bleeps(make(map[int]*PedalBleep))
 var ugens = make(map[string]*ugen.Ugen)
-
-var snareBuf []float64
-var bassBuf []float64
 
 func playDrum(ugenName string, param []*float64) {
 	percOdom++
@@ -314,45 +245,6 @@ func Run() {
 	addr := flag.String("addr", "localhost:8080", "http service address")
 	flag.Parse()
 
-	snareBuf = make([]float64, 60000)
-	{
-		drumPhase := 0.0
-		for i := range snareBuf {
-			t := float64(i)
-			snareBuf[i] = (rand.Float64() - 0.5) * math.Exp(-t/1500.0) * 0.2
-			bot := 40.0
-			top := 200.0
-			falling := top - (top-bot)*(t/2000.0)
-			if falling < bot {
-				falling = bot
-			}
-			fr := falling * (1.0 + math.Sin(2.0*3.14159*30.0*t/44100.0))
-			drumPhase += 2.0 * 3.14159 * fr / 44100.0
-			snareBuf[i] += math.Sin(drumPhase) * 0.2 * math.Exp(-t/1000.0)
-			snareBuf[i] += math.Sin(2.0*3.14159*137.0/44100.0*t) * 0.1 * math.Exp(-t/1500.0)
-		}
-	}
-
-	bassBuf = make([]float64, 60000)
-	{
-		drumPhase := 0.0
-		for i := range bassBuf {
-			t := float64(i)
-			bot := 30.0
-			top := 120.0
-			falling := top - (top-bot)*(t/3500.0)
-			if falling < bot {
-				falling = bot
-			}
-			fr := falling * (1.0 + 0.5*math.Sin(2.0*3.14159*25.0*t/44100.0))
-			drumPhase += 2.0 * 3.14159 * fr / 44100.0
-			bassBuf[i] = math.Sin(drumPhase) * 0.1
-			hold := 1000.0
-			if t > hold {
-				bassBuf[i] *= math.Exp(-(t - hold) / 2500.0)
-			}
-		}
-	}
 	portaudio.Initialize()
 	defer portaudio.Terminate()
 
@@ -476,27 +368,6 @@ func join(bus Bus) {
 }
 
 // Utils
-func tern(cond bool, x float64, y float64) float64 {
-	if cond {
-		return x
-	} else {
-		return y
-	}
-}
-
-func sqr(x float64) float64 {
-	if x < 0.5 {
-		return 1
-	}
-	return -1
-}
-
-func saw(x float64) float64 {
-	if x < 0.5 {
-		return 4*x - 1
-	}
-	return 3 - 4*x
-}
 
 func chk(err error) {
 	if err != nil {
