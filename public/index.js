@@ -31,7 +31,7 @@ Remote.prototype.send = function(action, args) {
 }
 
 function go() {
-  var rem = new Remote();
+  window.rem = new Remote();
   $("#load_but").on("click", function() {
     rem.send("load", {
       name: $("#ugen_name").val(),
@@ -72,7 +72,7 @@ function go() {
       processData: false,
       data : replatch,
       success: function(data, status, req) {
-        console.log(data);
+        playBeeps(data);
       },
       error: function (req, status, err) {
         console.log(err);
@@ -80,4 +80,76 @@ function go() {
     });
   });
 
+}
+
+var PAT_WIDTH = 50;
+var w_scale = PAT_WIDTH / 32;
+var PAT_HEIGHT = 80;
+function playBeeps(data) {
+  window.data = data;
+  //console.log(data);
+  var id_odom = 0;
+  var agenda = [];
+
+  var c = $("#c")[0];
+  var d = c.getContext('2d');
+  var w = c.width = 1000;
+  var h = c.height = 500;
+  d.fillRect(0,0,w,h);
+  for (var chan = 0; chan < data.channelBars.length; chan++) {
+    var bars = data.channelBars[chan];
+    for (var bar = 0; bar < bars.length; bar++) {
+      d.fillStyle = "white";
+      d.strokeStyle = "blue";
+      d.lineWidth = 1;
+      d.fillText(bars[bar], bar * PAT_WIDTH + 5, chan * PAT_HEIGHT + 15);
+      d.strokeRect(bar * PAT_WIDTH, chan * PAT_HEIGHT, PAT_WIDTH, PAT_HEIGHT);
+      if (bars[bar] > 0) {
+        d.fillStyle = ["red", "yellow", "green", "blue"][chan];
+        data.channelPatterns[chan][bars[bar]-1].tones.forEach(function(tone) {
+          tone.notes.forEach(function(note) {
+            if (chan != 3) {
+              agenda.push([bar * 32 + tone.start,
+                           {action: "note",
+                            args: {
+                              on: true,
+                              id: id_odom,
+                              ugenName: "midi",
+                              vel: 10,
+                              pitch: note + 36,
+                            }}]);
+              agenda.push([bar * 32 + tone.end,
+                           {action: "note",
+                            args: {
+                              on: false,
+                              id: id_odom,
+                            }}]);
+              id_odom++;
+            }
+            d.fillRect(
+              bar * PAT_WIDTH + tone.start * w_scale,
+              chan * PAT_HEIGHT + 75 - note,
+              (tone.end - tone.start) * w_scale,
+              2
+            );
+          });
+        });
+      }
+    }
+  }
+  agenda = _.sortBy(agenda, function(x) { return x[0]; });
+  play_agenda(agenda, 0);
+}
+
+function play_agenda(agenda, ix) {
+  var item = agenda[ix];
+  var time = item[0];
+  var cmd = item[1];
+  rem.send(cmd.action, cmd.args);
+  if (ix+1 < agenda.length) {
+    var dt = agenda[ix+1][0] - time;
+    setTimeout(function() {
+      play_agenda(agenda, ix+1);
+    }, dt * 50);
+  }
 }
