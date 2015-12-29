@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
@@ -9,9 +10,38 @@ import (
 
 var upgrader = websocket.Upgrader{}
 
+type WsCmdPre struct {
+	Action string          `json:"action"`
+	Args   json.RawMessage `json:"args"`
+}
+
 type WsCmd struct {
-	Action  string  `json:"action"`
-	Fparam0 float64 `json:"fparam0"`
+	Action string
+	Args   interface{}
+}
+
+type WsCmdLoad struct {
+	Filename string
+	Name     string
+}
+
+func (cmd *WsCmd) UnmarshalJSON(b []byte) (err error) {
+	var pre WsCmdPre
+	err = json.Unmarshal(b, &pre)
+	if err != nil {
+		return
+	}
+	cmd.Action = pre.Action
+	switch pre.Action {
+	case "load", "unload":
+		var post WsCmdLoad
+		if err = json.Unmarshal(pre.Args, &post); err == nil {
+			cmd.Args = post
+		}
+	default:
+		return fmt.Errorf("Unrecognized cmd: %s", b)
+	}
+	return nil
 }
 
 type CmdHandler func(WsCmd)

@@ -17,8 +17,17 @@ function go() {
     var val = $("#res_freq").val() / 100;
     ws.send(JSON.stringify({action: "res_freq", fparam0: 10 + val * 3000}));
   });
-  $("#reverb").on("click", function() {
-    reverb = !reverb;
-    ws.send(JSON.stringify({action: (reverb ? "reverb" : "no_reverb")}));
+  $("#load_but").on("click", function() {
+    ws.send(JSON.stringify({action: "load", args: {
+      name: $("#ugen_name").val(),
+      filename: $("#ugen_file").val(),
+    }}));
   });
+  $("#unload_but").on("click", function() {
+    ws.send(JSON.stringify({action: "unload", args: {
+      name: $("#ugen_name").val(),
+      filename: $("#ugen_file").val(),
+    }}));
+  });
+
 }

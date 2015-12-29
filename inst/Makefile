@@ -2,3 +2,4 @@ all:
 	gcc -shared -o bass.so bass.c
 	gcc -shared -o snare.so snare.c
 	gcc -shared -o lead.so lead.c
+	gcc -shared -o lead2.so lead2.c

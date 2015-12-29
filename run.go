@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"github.com/gordonklaus/portaudio"
 	"github.com/rakyll/portmidi"
-	"log"
 	"math"
 	"math/rand"
 	"os"
@@ -294,37 +293,29 @@ func openStream(cbk interface{}) (*portaudio.Stream, error) {
 	return portaudio.OpenStream(p, cbk)
 }
 
-func cmdHandle(cmd service.WsCmd) {
-	mutex.Lock()
-	defer mutex.Unlock()
-
-	switch {
-	case cmd.Action == "master_vol":
-		log.Printf("setting master_vol to %f\n", cmd.Fparam0)
-		master_vol = cmd.Fparam0
-	case cmd.Action == "res_freq":
-		log.Printf("setting res_freq to %f\n", cmd.Fparam0)
-		resFreq = cmd.Fparam0
-		filters = []Filter{lopass(resFreq, BQ), spread}
-	case cmd.Action == "no_reverb":
-		filters = []Filter{lopass(resFreq, BQ), spread}
-	case cmd.Action == "reverb":
-		filters = []Filter{lopass(resFreq, BQ), reverb, spread}
+func LoadUgen(filename string, name string) error {
+	old, ok := ugens[name]
+	if ok {
+		old.Close()
+		delete(ugens, name)
 	}
+	ug, err := ugen.Load(filename)
+	if err != nil {
+		return err
+	}
+	ugens[name] = ug
+	return nil
+}
+
+func UnloadUgen(name string) {
+	ugens[name].Close()
+	delete(ugens, name)
 }
 
 func Run() {
-	leadUgen, err := ugen.Load("./inst/lead.so")
-	chk(err)
-	ugens["midi"] = leadUgen
-
-	bassUgen, err := ugen.Load("./inst/bass.so")
-	chk(err)
-	ugens["bass"] = bassUgen
-
-	snareUgen, err := ugen.Load("./inst/snare.so")
-	chk(err)
-	ugens["snare"] = snareUgen
+	chk(LoadUgen("./inst/lead.so", "midi"))
+	chk(LoadUgen("./inst/bass.so", "bass"))
+	chk(LoadUgen("./inst/snare.so", "snare"))
 
 	shouldRecord := flag.Bool("record", false, "whether to record")
 	addr := flag.String("addr", "localhost:8080", "http service address")
