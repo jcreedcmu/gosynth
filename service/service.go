@@ -8,7 +8,13 @@ import (
 	"net/http"
 )
 
-var upgrader = websocket.Upgrader{}
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		// XXX could instead check that it's coming specifically from
+		// localhost:8080 or the like
+		return true
+	},
+}
 
 type WsCmdPre struct {
 	Action string          `json:"action"`
@@ -88,7 +94,6 @@ func (cmdHandle CmdHandler) wsHandle(w http.ResponseWriter, r *http.Request) {
 }
 
 func Initialize(addr string, cmdHandle CmdHandler) {
-	http.Handle("/", http.FileServer(http.Dir("public")))
 	http.HandleFunc("/ws", cmdHandle.wsHandle)
 	go func() {
 		log.Fatal(http.ListenAndServe(addr, nil))

@@ -6,7 +6,7 @@ function send(ws, action, args) {
 }
 
 function go() {
-  var ws = new WebSocket("ws://" + window.location.host + "/ws");
+  var ws = new WebSocket("ws://" + window.location.hostname + ":8080/ws");
   ws.onopen = function() {
     console.log("open");
   }
@@ -33,7 +33,7 @@ function go() {
     send(ws, "note", {
       on: true,
       id: id,
-      ugenName: Math.random() < 0.5 ? "lead" : "midi",
+      ugenName: "midi",
       vel: 10,
       pitch: Math.floor(Math.random() * 48 + 45),
     });
