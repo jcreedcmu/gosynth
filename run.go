@@ -26,7 +26,6 @@ type Osc interface {
 	Restart()
 	getEnv() (float64, bool)
 }
-type Oscs map[int]Osc
 
 type Envelope struct {
 	Attack  int64
@@ -110,32 +109,32 @@ var pedal = false
 const STOP = 0
 const RESTART = 1
 
-func (oscs Oscs) noteOn(which int, vel int64) {
+func (bleeps Bleeps) noteOn(ugenName string, pitch int, vel int64) {
 	mutex.Lock()
 	defer mutex.Unlock()
 
-	osc, ok := bleeps[which]
+	osc, ok := bleeps[pitch]
 	if ok {
 		// reuse old note
 		osc.ui.Msg(RESTART)
 		osc.pedal_hold = false
 	} else {
 		// alloc new note
-		freq := 440 * math.Pow(2, float64(which-69)/12)
+		freq := 440 * math.Pow(2, float64(pitch-69)/12)
 		amp := 0.08
-		bleeps[which] = &PedalBleep{
+		bleeps[pitch] = &PedalBleep{
 			pedal_hold: false,
-			ui:         ugens["midi"].Create(),
+			ui:         ugens[ugenName].Create(),
 			param:      []*float64{&freq, &amp},
 		}
 	}
 }
 
-func (oscs Oscs) noteOff(which int) {
+func (bleeps Bleeps) noteOff(pitch int) {
 	mutex.Lock()
 	defer mutex.Unlock()
 
-	osc, ok := bleeps[which]
+	osc, ok := bleeps[pitch]
 	if ok {
 		if pedal {
 			osc.pedal_hold = true
@@ -145,13 +144,13 @@ func (oscs Oscs) noteOff(which int) {
 	}
 }
 
-func (oscs Oscs) pedalOn() {
+func (bleeps Bleeps) pedalOn() {
 	mutex.Lock()
 	defer mutex.Unlock()
 	pedal = true
 }
 
-func (oscs Oscs) pedalOff() {
+func (bleeps Bleeps) pedalOff() {
 	mutex.Lock()
 	defer mutex.Unlock()
 
@@ -164,7 +163,7 @@ func (oscs Oscs) pedalOff() {
 	}
 }
 
-func listenMidi(in *portmidi.Stream, oscs Oscs) {
+func listenMidi(in *portmidi.Stream, bleeps Bleeps) {
 	ch := in.Listen()
 	fmt.Printf("Listening...\n")
 	for {
@@ -173,17 +172,17 @@ func listenMidi(in *portmidi.Stream, oscs Oscs) {
 			switch {
 			case ev.Status >= 0x90 && ev.Status < 0xa0:
 				if ev.Data2 != 0 {
-					oscs.noteOn(int(ev.Data1), ev.Data2)
+					bleeps.noteOn("midi", int(ev.Data1), ev.Data2)
 				} else {
-					oscs.noteOff(int(ev.Data1))
+					bleeps.noteOff(int(ev.Data1))
 				}
 			case ev.Status >= 0x80 && ev.Status < 0x90:
-				oscs.noteOff(int(ev.Data1))
+				bleeps.noteOff(int(ev.Data1))
 			case ev.Status == 0xb0:
 				if ev.Data2 == 0 {
-					oscs.pedalOff()
+					bleeps.pedalOff()
 				} else {
-					oscs.pedalOn()
+					bleeps.pedalOn()
 				}
 			default:
 				fmt.Printf("%+v\n", ev)
@@ -192,14 +191,15 @@ func listenMidi(in *portmidi.Stream, oscs Oscs) {
 	}
 }
 
-var oscs Oscs
 var inner time.Duration
 var innerCount int64
 
 var percOdom int
 var percs = make(map[int]*PedalBleep)
 
-var bleeps = make(map[int]*PedalBleep)
+type Bleeps map[int]*PedalBleep
+
+var bleeps = Bleeps(make(map[int]*PedalBleep))
 var ugens = make(map[string]*ugen.Ugen)
 
 var snareBuf []float64
@@ -228,15 +228,6 @@ func processAudio(out [][]float32) {
 
 		for i := range bus {
 			bus[i] = 0.0
-		}
-
-		for i, osc := range oscs {
-			s, kill := osc.signal()
-			bus[0] += s
-			if kill {
-				delete(oscs, i)
-				continue
-			}
 		}
 
 		for _, filter := range filters {
@@ -376,8 +367,6 @@ func Run() {
 		chk(err)
 	}
 
-	oscs = Oscs(make(map[int]Osc))
-
 	s, err := openStream(processAudio)
 	fmt.Println("%+v\n", s.Info())
 	chk(err)
@@ -391,7 +380,7 @@ func Run() {
 		portmidi.Initialize()
 		in, err := portmidi.NewInputStream(portmidi.GetDefaultInputDeviceId(), 1024)
 		chk(err)
-		go listenMidi(in, oscs)
+		go listenMidi(in, bleeps)
 		defer portmidi.Terminate()
 	}
 
