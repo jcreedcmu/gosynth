@@ -25,6 +25,14 @@ type WsCmdLoad struct {
 	Name     string
 }
 
+type WsCmdNote struct {
+	On       bool
+	Id       int
+	UgenName string
+	Vel      float64
+	Pitch    int
+}
+
 func (cmd *WsCmd) UnmarshalJSON(b []byte) (err error) {
 	var pre WsCmdPre
 	err = json.Unmarshal(b, &pre)
@@ -35,6 +43,11 @@ func (cmd *WsCmd) UnmarshalJSON(b []byte) (err error) {
 	switch pre.Action {
 	case "load", "unload":
 		var post WsCmdLoad
+		if err = json.Unmarshal(pre.Args, &post); err == nil {
+			cmd.Args = post
+		}
+	case "note":
+		var post WsCmdNote
 		if err = json.Unmarshal(pre.Args, &post); err == nil {
 			cmd.Args = post
 		}
@@ -63,13 +76,11 @@ func (cmdHandle CmdHandler) wsHandle(w http.ResponseWriter, r *http.Request) {
 			if mt == websocket.TextMessage {
 				var cmd WsCmd
 
-				log.Printf("got: %s\n", message)
 				err := json.Unmarshal(message, &cmd)
 				if err != nil {
 					log.Println("json err:", err)
 					continue
 				}
-				log.Printf("got json: %+v\n", cmd)
 				cmdHandle(cmd)
 			}
 		}

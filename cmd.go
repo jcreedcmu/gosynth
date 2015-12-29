@@ -5,6 +5,8 @@ import (
 	"log"
 )
 
+var aliases = make(map[int]int)
+
 func cmdHandle(cmd service.WsCmd) {
 	mutex.Lock()
 	defer mutex.Unlock()
@@ -21,6 +23,24 @@ func cmdHandle(cmd service.WsCmd) {
 		args := cmd.Args.(service.WsCmdLoad)
 		log.Printf("UNLOADING %s\n", args.Name)
 		UnloadUgen(args.Name)
+	case "note":
+		args := cmd.Args.(service.WsCmdNote)
+		if args.On {
+			_, already := aliases[args.Id]
+			if !already {
+				aliases[args.Id] = genOn(args.UgenName, args.Pitch, args.Vel)
+			} else {
+				log.Printf("Trying to play note with duplicate external id %d\n", args.Id)
+			}
+		} else {
+			internal, ok := aliases[args.Id]
+			if ok {
+				genOff(internal)
+				delete(aliases, args.Id)
+			} else {
+				log.Printf("Trying to delete nonexistent note, external id %d\n", args.Id)
+			}
+		}
 	default:
 		log.Printf("Unknown action %+v\n", cmd)
 	}

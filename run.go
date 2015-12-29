@@ -136,13 +136,21 @@ type Bleeps map[int]*PedalBleep
 var bleeps = Bleeps(make(map[int]*PedalBleep))
 var ugens = make(map[string]*ugen.Ugen)
 
-func playDrum(ugenName string, param []*float64) {
+func genOn(ugenName string, pitch int, vel float64) int {
+	id := percOdom
 	percOdom++
-	percs[percOdom] = &PedalBleep{
+	freq := 440 * math.Pow(2, float64(pitch-69)/12)
+	amp := 0.01 * vel
+	percs[id] = &PedalBleep{
 		pedal_hold: false,
 		ui:         ugens[ugenName].Create(),
-		param:      param,
+		param:      []*float64{&freq, &amp},
 	}
+	return id
+}
+
+func genOff(id int) {
+	percs[id].ui.Msg(STOP)
 }
 
 func processAudio(out [][]float32) {
@@ -278,12 +286,12 @@ func Run() {
 
 	if false {
 		go func() {
-			amp := 0.1
+			vel := 10.0
 			tempo := 1500 * time.Microsecond
 			for {
-				playDrum("bass", []*float64{&amp})
+				genOn("bass", 0, vel)
 				time.Sleep(300 * tempo)
-				playDrum("snare", []*float64{&amp})
+				genOn("snare", 0, vel)
 				time.Sleep(300 * tempo)
 			}
 		}()

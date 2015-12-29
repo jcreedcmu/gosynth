@@ -1,6 +1,10 @@
 $(go);
 var reverb = true;
 
+function send(ws, action, args) {
+  ws.send(JSON.stringify({action: action, args: args}));
+}
+
 function go() {
   var ws = new WebSocket("ws://" + window.location.host + "/ws");
   ws.onopen = function() {
@@ -9,25 +13,36 @@ function go() {
   ws.onclose = function() {
     console.log("closed");
   }
-  $("#master_vol").on("input", function() {
-    var vol = 0.15 * ($("#master_vol").val() / 100);
-    ws.send(JSON.stringify({action: "master_vol", fparam0: vol}));
-  });
-  $("#res_freq").on("input", function() {
-    var val = $("#res_freq").val() / 100;
-    ws.send(JSON.stringify({action: "res_freq", fparam0: 10 + val * 3000}));
-  });
   $("#load_but").on("click", function() {
-    ws.send(JSON.stringify({action: "load", args: {
+    send(ws, "load", {
       name: $("#ugen_name").val(),
       filename: $("#ugen_file").val(),
-    }}));
+    });
   });
   $("#unload_but").on("click", function() {
-    ws.send(JSON.stringify({action: "unload", args: {
+    send(ws, "unload", {
       name: $("#ugen_name").val(),
       filename: $("#ugen_file").val(),
-    }}));
+    });
+  });
+
+  var odom = 100;
+
+  $("#note_on").on("click", function() {
+    var id = odom++;
+    send(ws, "note", {
+      on: true,
+      id: id,
+      ugenName: Math.random() < 0.5 ? "lead" : "midi",
+      vel: 10,
+      pitch: Math.floor(Math.random() * 48 + 45),
+    });
+    setTimeout(function() {
+      send(ws, "note", {
+        on: false,
+        id: id,
+      });
+    }, 1000);
   });
 
 }
