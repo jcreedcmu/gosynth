@@ -9,9 +9,12 @@ import (
 	"unsafe"
 )
 
-type Ugen C.ugen_t
+type Ugen struct {
+	gen *C.ugen_t
+}
+
 type Uinst struct {
-	gen  *Ugen
+	gen  *C.ugen_t
 	inst unsafe.Pointer
 }
 
@@ -24,21 +27,19 @@ func Load(filename string) (*Ugen, error) {
 	if err != nil {
 		return nil, errors.New(C.GoString(err))
 	}
-	var ugen_out Ugen
-	ugen_out = Ugen(ugen)
-	return &ugen_out, nil
+	return &Ugen{gen: ugen}, nil
 }
 
 func (u *Ugen) Create() *Uinst {
-	var uinst Uinst
-	uinst.gen = u
-	uinst.inst = C.ugen_create(*((*C.ugen_t)(u)))
-	return &uinst
+	return &Uinst{
+		gen:  u.gen,
+		inst: C.ugen_create(u.gen),
+	}
 }
 
 func (ui *Uinst) Run(param []*float64, buf []float64) bool {
 	kill := C.ugen_run(
-		*((*C.ugen_t)(ui.gen)),
+		ui.gen,
 		(**C.double)(unsafe.Pointer(&param[0])),
 		ui.inst,
 		(*C.double)(unsafe.Pointer(&buf[0])),
@@ -49,13 +50,13 @@ func (ui *Uinst) Run(param []*float64, buf []float64) bool {
 
 func (ui *Uinst) Destroy() {
 	C.ugen_destroy(
-		*((*C.ugen_t)(ui.gen)),
+		ui.gen,
 		ui.inst,
 	)
 }
 
 func (u *Ugen) Close() error {
-	C.ugen_close(*((*C.ugen_t)(u)))
+	C.ugen_close(u.gen)
 	err := C.error()
 	if err != nil {
 		return errors.New(C.GoString(err))
@@ -65,7 +66,7 @@ func (u *Ugen) Close() error {
 
 func (ui *Uinst) Msg(sig int) {
 	C.ugen_msg(
-		*((*C.ugen_t)(ui.gen)),
+		ui.gen,
 		ui.inst,
 		C.int(sig),
 	)

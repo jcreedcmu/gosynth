@@ -19,15 +19,15 @@ typedef struct {
 char *error();
 
 // load and unload ugen definitions
-ugen_t ugen_load(char *filename);
-void ugen_close(ugen_t u);
+ugen_t *ugen_load(char *filename);
+void ugen_close(ugen_t *u);
 
 // create and destroy individual notes/instances of a ugen
-void *ugen_create(ugen_t u);
-void ugen_destroy(ugen_t u, void *instance);
+void *ugen_create(ugen_t *u);
+void ugen_destroy(ugen_t *u, void *instance);
 
 // ask a ugen instance to render a little bit of audio signal into a buffer
-int ugen_run(ugen_t u, double **param, void *instance, double *buf, int len);
+int ugen_run(ugen_t *u, double **param, void *instance, double *buf, int len);
 
 // send a simple integer message to a ugen instance, like to tell it
 // to stop soon (but maybe it'll decide to decay a while still before
@@ -36,7 +36,7 @@ int ugen_run(ugen_t u, double **param, void *instance, double *buf, int len);
 // a previous note at the same pitch. The semantics of these messages
 // is left open here, the ugens and whoever's allocating them can
 // decide on a protocol.
-void ugen_msg(ugen_t u, void *instance, int sig);
+void ugen_msg(ugen_t *u, void *instance, int sig);
 
 // actually deallocate all the ugen's functions
-void ugen_really_close(ugen_t u);
+void ugen_really_close(ugen_t *u);

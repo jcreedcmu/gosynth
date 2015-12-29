@@ -395,7 +395,7 @@ func Run() {
 		defer portmidi.Terminate()
 	}
 
-	if true {
+	if false {
 		go func() {
 			amp := 0.1
 			tempo := 1500 * time.Microsecond

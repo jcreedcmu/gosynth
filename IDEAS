@@ -1,0 +1,15 @@
+=== 2015.12.27
+
+DONE: make Run return kill signal
+DONE: factor buffer loop out of individual ugen code
+DONE: see if I can get rid of Ugens type by moving whatever methods I defined on it to PedalBleep
+TODO: thread loop index into ugen run function so can use params as buffers,
+actually this should take the place of vestigial len argument
+DONE: get drums working
+
+=== 2015.12.28
+
+DONE: get "load/unload ugen" from js working
+
+TODO: get "play note" from js working
+TODO: get filters working
