@@ -1,1 +1,3 @@
 inst/*.so
+node_modules
+*.wav
