@@ -2,26 +2,44 @@ var replatch = "5sbk1l02e0ftaa7g0hjci0r1w1231f1000d1210c0100h0060v0001o3200b4zhm
 
 $(go);
 
-function send(ws, action, args) {
-  ws.send(JSON.stringify({action: action, args: args}));
-}
+function Remote() {}
 
-function go() {
-  var ws = new WebSocket("ws://" + window.location.hostname + ":8080/ws");
+Remote.prototype.open = function() {
+  var ws = this.ws = new WebSocket("ws://" + window.location.hostname + ":8080/ws");
   ws.onopen = function() {
     console.log("open");
   }
   ws.onclose = function() {
     console.log("closed");
   }
+  return this.ws;
+}
+
+Remote.prototype.send = function(action, args) {
+  var ws = this.ws;
+  if (ws == null || ws.readyState == ws.CLOSED) {
+    ws = this.open();
+    var old = ws.onopen;
+    ws.onopen = function() {
+      ws.send(JSON.stringify({action: action, args: args}));
+      old();
+    }
+  }
+  else {
+    ws.send(JSON.stringify({action: action, args: args}));
+  }
+}
+
+function go() {
+  var rem = new Remote();
   $("#load_but").on("click", function() {
-    send(ws, "load", {
+    rem.send("load", {
       name: $("#ugen_name").val(),
       filename: $("#ugen_file").val(),
     });
   });
   $("#unload_but").on("click", function() {
-    send(ws, "unload", {
+    rem.send("unload", {
       name: $("#ugen_name").val(),
       filename: $("#ugen_file").val(),
     });
@@ -31,7 +49,7 @@ function go() {
 
   $("#note_on").on("click", function() {
     var id = odom++;
-    send(ws, "note", {
+    rem.send("note", {
       on: true,
       id: id,
       ugenName: "midi",
@@ -39,7 +57,7 @@ function go() {
       pitch: Math.floor(Math.random() * 48 + 45),
     });
     setTimeout(function() {
-      send(ws, "note", {
+      rem.send("note", {
         on: false,
         id: id,
       });
