@@ -249,6 +249,7 @@ func processAudio(out [][]float32) {
 	for i, osc := range bleeps {
 		kill := osc.batchSignal(out64[0])
 		if kill {
+			bleeps[i].ui.Destroy()
 			delete(bleeps, i)
 			continue
 		}
@@ -257,6 +258,7 @@ func processAudio(out [][]float32) {
 	for i, osc := range percs {
 		kill := osc.batchSignal(out64[0])
 		if kill {
+			percs[i].ui.Destroy()
 			delete(percs, i)
 			continue
 		}
