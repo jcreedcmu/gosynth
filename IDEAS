@@ -14,6 +14,6 @@ DONE: get "load/unload ugen" from js working
 === 2015.12.29
 
 DONE: get "play note" from js working
-TODO: move http server over to js
+DONE: move http server over to js
 TODO: beepbox import
 TODO: get filters working

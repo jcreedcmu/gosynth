@@ -4,8 +4,7 @@
   "description": "As expressive as they are, things like overtone, supercollider, ChucK, pd, etc. always feel like a big teetering stack of dependencies that I don't really understand. So I eternally find myself trying to make a nice minimal simple synth I can drive from a MIDI keyboard.",
   "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js"
+    "start": "node js/server.js"
   },
   "repository": {
     "type": "git",
@@ -18,7 +17,9 @@
   },
   "homepage": "https://github.com/jcreedcmu/gosynth#readme",
   "dependencies": {
+    "body-parser": "^1.14.2",
     "express": "^4.13.3",
+    "underscore": "^1.8.3",
     "websocket": "^1.0.22"
   }
 }
