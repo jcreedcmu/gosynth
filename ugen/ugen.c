@@ -57,7 +57,7 @@ int ugen_run(ugen_t *u, double **param, void *instance, double *buf, int len) {
   int (*run)(void *, double **, double *, int) = u->run;
   int kill = 0;
   for (int i = 0; i < len; i++) {
-    if (run(instance, param, &(buf[i]), len)) {
+    if (run(instance, param, &(buf[i]), i)) {
       return 1;
     }
   }

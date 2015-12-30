@@ -10,7 +10,7 @@ typedef struct {
 void msg(void *instance, int sig) {
 }
 
-int run(void *instance, double **param, double *out, int len) {
+int run(void *instance, double **param, double *out, int ix) {
   double amp = *(param[0]);
   state_t *state = (state_t *)instance;
 

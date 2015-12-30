@@ -280,9 +280,12 @@ func Run() {
 	if true {
 		portmidi.Initialize()
 		in, err := portmidi.NewInputStream(portmidi.GetDefaultInputDeviceId(), 1024)
-		chk(err)
-		go listenMidi(in, bleeps)
-		defer portmidi.Terminate()
+		if err != nil {
+			fmt.Printf("ERROR initializing portmidi: %s\n", err)
+		} else {
+			go listenMidi(in, bleeps)
+			defer portmidi.Terminate()
+		}
 	}
 
 	if false {

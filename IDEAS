@@ -3,8 +3,6 @@
 DONE: make Run return kill signal
 DONE: factor buffer loop out of individual ugen code
 DONE: see if I can get rid of Ugens type by moving whatever methods I defined on it to PedalBleep
-TODO: thread loop index into ugen run function so can use params as buffers,
-actually this should take the place of vestigial len argument
 DONE: get drums working
 
 === 2015.12.28
@@ -15,5 +13,12 @@ DONE: get "load/unload ugen" from js working
 
 DONE: get "play note" from js working
 DONE: move http server over to js
-TODO: beepbox import
+DONE: beepbox import
+
+=== 2015.12.30
+
+DONE: thread loop index into ugen run function so can use params as buffers,
+actually this should take the place of vestigial len argument
+TODO: kill all running ugens
+TODO: let ui stop playback of song
 TODO: get filters working
