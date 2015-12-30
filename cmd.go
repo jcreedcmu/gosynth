@@ -41,6 +41,9 @@ func cmdHandle(cmd service.WsCmd) {
 				log.Printf("Trying to delete nonexistent note, external id %d\n", args.Id)
 			}
 		}
+	case "halt":
+		aliases = make(map[int]int)
+		genAllOff()
 	default:
 		log.Printf("Unknown action %+v\n", cmd)
 	}

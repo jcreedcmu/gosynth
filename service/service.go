@@ -57,6 +57,8 @@ func (cmd *WsCmd) UnmarshalJSON(b []byte) (err error) {
 		if err = json.Unmarshal(pre.Args, &post); err == nil {
 			cmd.Args = post
 		}
+	case "halt":
+		cmd.Args = nil
 	default:
 		return fmt.Errorf("Unrecognized cmd: %s", b)
 	}

@@ -153,6 +153,12 @@ func genOff(id int) {
 	percs[id].ui.Msg(STOP)
 }
 
+func genAllOff() {
+	for id := range percs {
+		percs[id].ui.Msg(STOP)
+	}
+}
+
 func processAudio(out [][]float32) {
 	mutex.Lock()
 	defer mutex.Unlock()

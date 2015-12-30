@@ -64,6 +64,9 @@ function go() {
     }, 1000);
   });
 
+  $("#stop").on("click", function() {
+    stopBeeps();
+  });
   $("#play").on("click", function() {
     $.ajax({
       url : "/parse",
@@ -85,6 +88,12 @@ function go() {
 var PAT_WIDTH = 50;
 var w_scale = PAT_WIDTH / 32;
 var PAT_HEIGHT = 80;
+
+function stopBeeps() {
+  clearInterval(window.agenda_timeout);
+  rem.send("halt", {});
+}
+
 function playBeeps(data) {
   window.data = data;
   //console.log(data);
@@ -138,7 +147,9 @@ function playBeeps(data) {
     }
   }
   agenda = _.sortBy(agenda, function(x) { return x[0]; });
-  play_agenda(agenda, 0);
+  window.agenda_timeout = setTimeout(function() {
+    play_agenda(agenda, 0);
+  }, 0);
 }
 
 function play_agenda(agenda, ix) {
@@ -148,8 +159,9 @@ function play_agenda(agenda, ix) {
   rem.send(cmd.action, cmd.args);
   if (ix+1 < agenda.length) {
     var dt = agenda[ix+1][0] - time;
-    setTimeout(function() {
-      play_agenda(agenda, ix+1);
-    }, dt * 75);
+    window.agenda_timeout =
+      setTimeout(function() {
+        play_agenda(agenda, ix+1);
+      }, dt * 75);
   }
 }
