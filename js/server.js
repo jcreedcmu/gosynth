@@ -27,5 +27,5 @@ app.use('/parse', function(req, res) {
 });
 
 var port = 8081
-app.listen(port);
+app.listen(port, '127.0.0.1');
 console.log('Express started on port ' + port);
