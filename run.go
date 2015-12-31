@@ -16,7 +16,6 @@ import (
 )
 
 type Bus []float64
-type Filter func(bus Bus)
 
 const sampleRate = 44100
 
@@ -34,7 +33,6 @@ var post_amp = 0.05
 var resFreq = 2646.2
 
 var bus Bus = make([]float64, 4)
-var filters []Filter
 
 var f *os.File
 var mutex = &sync.Mutex{}
@@ -169,18 +167,6 @@ func processAudio(out [][]float32) {
 		make([]float64, len(out[0])),
 		make([]float64, len(out[1])),
 	}
-	for i := range out64[0] {
-
-		for i := range bus {
-			bus[i] = 0.0
-		}
-
-		for _, filter := range filters {
-			filter(bus)
-		}
-		out64[0][i] = bus[0]
-		out64[1][i] = bus[1]
-	}
 
 	for i, osc := range bleeps {
 		kill := osc.batchSignal(out64[0])
@@ -307,9 +293,6 @@ func Run() {
 		}()
 	}
 
-	filters = []Filter{overdrive(0, 0.05), overdrive(2, 0.2), join, reverb, lopass(resFreq, BQ), spread}
-	//	filters = []Filter{spread}
-
 	go func() {
 		for {
 			fmt.Printf("inner loop taking avg ~%f samples\n", inner.Seconds()*sampleRate/float64(innerCount))
@@ -341,7 +324,7 @@ func overdrive(n int, LIMIT float64) func(bus Bus) {
 
 var lopass_phase = 0.0
 
-func lopass(resFreq float64, Q float64) Filter {
+func lopass(resFreq float64, Q float64) func(bus Bus) {
 	// Compute some params for the low-pass
 	return func(bus Bus) {
 		// _, lopass_phase = math.Modf(lopass_phase + 0.1/sampleRate)
