@@ -14,8 +14,9 @@ double frand() {
   return (double)rand()/(double)(RAND_MAX);
 }
 
-int run(void *instance, double **param, double *out, int ix) {
-  double amp = *(param[0]);
+int run(void *instance, double **param, int ix) {
+  double *out = param[0] + ix;
+  double amp = *(param[1]);
   state_t *state = (state_t *)instance;
 
   double t = state->t;

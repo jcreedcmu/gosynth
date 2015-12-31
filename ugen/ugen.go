@@ -37,13 +37,12 @@ func (u *Ugen) Create() *Uinst {
 	}
 }
 
-func (ui *Uinst) Run(param []*float64, buf []float64) bool {
+func (ui *Uinst) Run(param []*float64, frames int) bool {
 	kill := C.ugen_run(
 		ui.gen,
 		(**C.double)(unsafe.Pointer(&param[0])),
 		ui.inst,
-		(*C.double)(unsafe.Pointer(&buf[0])),
-		C.int(len(buf)),
+		C.int(frames),
 	)
 	return kill != 0
 }

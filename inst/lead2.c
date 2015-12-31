@@ -63,9 +63,10 @@ void msg(void *instance, int sig) {
   }
 }
 
-int run(void *instance, double **param, double *out, int ix) {
-  double freq = *(param[0]);
-  double amp = *(param[1]);
+int run(void *instance, double **param, int ix) {
+  double *out = param[0] + ix;
+  double freq = *(param[1]);
+  double amp = *(param[2]);
   state_t *state = (state_t *)instance;
 
   double env;

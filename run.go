@@ -57,7 +57,7 @@ func (bleeps Bleeps) noteOn(ugenName string, pitch int, vel int64) {
 		bleeps[pitch] = &PedalBleep{
 			pedal_hold: false,
 			ui:         ugens[ugenName].Create(),
-			param:      []*float64{&freq, &amp},
+			param:      []*float64{nil, &freq, &amp},
 		}
 	}
 }
@@ -129,6 +129,12 @@ var innerCount int64
 var percOdom int
 var percs = make(map[int]*PedalBleep)
 
+type PedalBleep struct {
+	pedal_hold bool
+	ui         *ugen.Uinst
+	param      []*float64
+}
+
 type Bleeps map[int]*PedalBleep
 
 var bleeps = Bleeps(make(map[int]*PedalBleep))
@@ -142,7 +148,7 @@ func genOn(ugenName string, pitch int, vel float64) int {
 	percs[id] = &PedalBleep{
 		pedal_hold: false,
 		ui:         ugens[ugenName].Create(),
-		param:      []*float64{&freq, &amp},
+		param:      []*float64{nil, &freq, &amp},
 	}
 	return id
 }
@@ -162,14 +168,16 @@ func processAudio(out [][]float32) {
 	defer mutex.Unlock()
 
 	start := time.Now()
+	buflen := len(out[0])
 
 	out64 := [][]float64{
-		make([]float64, len(out[0])),
-		make([]float64, len(out[1])),
+		make([]float64, buflen),
+		make([]float64, buflen),
 	}
 
 	for i, osc := range bleeps {
-		kill := osc.batchSignal(out64[0])
+		osc.param[0] = &out64[0][0]
+		kill := osc.ui.Run(osc.param, buflen)
 		if kill {
 			bleeps[i].ui.Destroy()
 			delete(bleeps, i)
@@ -178,7 +186,8 @@ func processAudio(out [][]float32) {
 	}
 
 	for i, osc := range percs {
-		kill := osc.batchSignal(out64[0])
+		osc.param[0] = &out64[0][0]
+		kill := osc.ui.Run(osc.param, buflen)
 		if kill {
 			percs[i].ui.Destroy()
 			delete(percs, i)

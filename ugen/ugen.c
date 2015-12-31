@@ -53,11 +53,11 @@ void ugen_destroy(ugen_t *u, void *instance) {
   }
 }
 
-int ugen_run(ugen_t *u, double **param, void *instance, double *buf, int len) {
-  int (*run)(void *, double **, double *, int) = u->run;
+int ugen_run(ugen_t *u, double **param, void *instance, int len) {
+  int (*run)(void *, double **, int) = u->run;
   int kill = 0;
   for (int i = 0; i < len; i++) {
-    if (run(instance, param, &(buf[i]), i)) {
+    if (run(instance, param, i)) {
       return 1;
     }
   }

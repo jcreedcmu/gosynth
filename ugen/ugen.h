@@ -26,8 +26,8 @@ void ugen_close(ugen_t *u);
 void *ugen_create(ugen_t *u);
 void ugen_destroy(ugen_t *u, void *instance);
 
-// ask a ugen instance to render a little bit of audio signal into a buffer
-int ugen_run(ugen_t *u, double **param, void *instance, double *buf, int len);
+// ask a ugen instance to render a little bit of its audio signal
+int ugen_run(ugen_t *u, double **param, void *instance, int len);
 
 // send a simple integer message to a ugen instance, like to tell it
 // to stop soon (but maybe it'll decide to decay a while still before
