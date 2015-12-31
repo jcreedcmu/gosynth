@@ -19,6 +19,9 @@ DONE: beepbox import
 
 DONE: thread loop index into ugen run function so can use params as buffers,
 actually this should take the place of vestigial len argument
-TODO: kill all running ugens
-TODO: let ui stop playback of song
+DONE: kill all running ugens
+DONE: let ui stop playback of song
+
+=== 2015.12.31
+
 TODO: get filters working
