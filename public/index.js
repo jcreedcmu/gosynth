@@ -8,7 +8,7 @@ Remote.prototype.send = function(action, args, cb) {
   $.ajax({
     url : "http://" + window.location.hostname + ":8080",
     type: "POST",
-    contentType: "text/json",
+    contentType: "text/plain",
     data: JSON.stringify({action: action, args: args}),
     success: cb,
     error: function (req, status, err) {

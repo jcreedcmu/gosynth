@@ -60,7 +60,6 @@ func (cmd *WsCmd) UnmarshalJSON(b []byte) (err error) {
 type CmdHandler func(WsCmd) (interface{}, error)
 
 func (cmdHandle CmdHandler) rootHandle(rw http.ResponseWriter, req *http.Request) {
-
 	// Allow any origin
 	if origin := req.Header.Get("Origin"); origin != "" {
 		rw.Header().Set("Access-Control-Allow-Origin", origin)
@@ -68,10 +67,7 @@ func (cmdHandle CmdHandler) rootHandle(rw http.ResponseWriter, req *http.Request
 		rw.Header().Set("Access-Control-Allow-Headers",
 			"Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
 	}
-	if req.Method == "OPTIONS" {
-		return
-	}
-	fmt.Printf("HERE\n")
+
 	decoder := json.NewDecoder(req.Body)
 	var cmd WsCmd
 	err := decoder.Decode(&cmd)
