@@ -204,7 +204,7 @@ func genOn(ugenName string, priority float64, pitch int, vel float64) int {
 	amp := 0.01 * vel
 	percs[id] = &PedalBleep{
 		ui:       ugens[ugenName].Create(),
-		param:    []*float64{getBus(1), &freq, &amp},
+		param:    []*float64{getBus(0), &freq, &amp},
 		priority: priority,
 	}
 	return id
@@ -305,6 +305,7 @@ func UnloadUgen(name string) {
 
 func Run() {
 	chk(LoadUgen("./inst/spread.so", "spread"))
+	chk(LoadUgen("./inst/reverb.so", "reverb"))
 	chk(LoadUgen("./inst/lead2.so", "midi"))
 	chk(LoadUgen("./inst/lead.so", "lead"))
 	chk(LoadUgen("./inst/bass.so", "bass"))
@@ -355,20 +356,28 @@ func Run() {
 		}
 	}
 
-	if false {
+	if true {
 		go func() {
 			vel := 10.0
 			tempo := 1500 * time.Microsecond
 			for {
 				// XXX should grab lock here
 				genOn("bass", 0, 0, vel)
-				time.Sleep(300 * tempo)
+				time.Sleep(200 * tempo)
 				genOn("snare", 0, 0, vel)
-				time.Sleep(300 * tempo)
+				time.Sleep(200 * tempo)
+				genOn("bass", 0, 0, vel)
+				time.Sleep(100 * tempo)
+				genOn("bass", 0, 0, vel/2)
+				time.Sleep(100 * tempo)
+				genOn("snare", 0, 0, vel)
+				time.Sleep(200 * tempo)
+
 			}
 		}()
 	}
 
+	filterOn("reverb", 99.0, []*float64{getBus(0)})
 	filterOn("spread", 100.0, []*float64{getBus(0), getBus(1)})
 
 	go func() {

@@ -4,3 +4,4 @@ all:
 	gcc -shared -o lead.so lead.c
 	gcc -shared -o lead2.so lead2.c
 	gcc -shared -o spread.so spread.c
+	gcc -shared -o reverb.so reverb.c

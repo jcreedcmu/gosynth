@@ -12,7 +12,7 @@ void msg(void *instance, int sig) {
 
 int run(void *instance, double **param, int ix) {
   double *out = param[0] + ix;
-  double amp = *(param[1]);
+  double amp = *(param[2]);
   state_t *state = (state_t *)instance;
 
   double t = state->t;

@@ -12,11 +12,11 @@ typedef struct {
 #define STOP     0
 #define RESTART  1
 
-#define ATTACK  400
-#define DECAY   6000
+#define ATTACK  600
+#define DECAY   1000
 #define SUSTAIN 0.4
-#define RELEASE 6000
-#define FALLOFF 0.000015
+#define RELEASE 12000
+#define FALLOFF 0.000020
 
 int get_env(state_t *state, double *env) {
   double t = state->t;
@@ -53,6 +53,7 @@ void msg(void *instance, int sig) {
   switch (sig) {
   case STOP:
     get_env(state, &state->last);
+    state->t = 0;
     state->gate = 0;
     break;
   case RESTART:

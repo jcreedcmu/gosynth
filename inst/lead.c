@@ -53,6 +53,7 @@ void msg(void *instance, int sig) {
   switch (sig) {
   case STOP:
     get_env(state, &state->last);
+    state->t = 0;
     state->gate = 0;
     break;
   case RESTART:
