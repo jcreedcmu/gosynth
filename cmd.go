@@ -28,7 +28,7 @@ func cmdHandle(cmd service.WsCmd) {
 		if args.On {
 			_, already := aliases[args.Id]
 			if !already {
-				aliases[args.Id] = genOn(args.UgenName, args.Pitch, args.Vel)
+				aliases[args.Id] = genOn(args.UgenName, args.Priority, args.Pitch, args.Vel)
 			} else {
 				log.Printf("Trying to play note with duplicate external id %d\n", args.Id)
 			}

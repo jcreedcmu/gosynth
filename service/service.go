@@ -36,6 +36,7 @@ type WsCmdNote struct {
 	Id       int
 	UgenName string
 	Vel      float64
+	Priority float64
 	Pitch    int
 }
 

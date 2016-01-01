@@ -11,11 +11,27 @@ import (
 	"github.com/rakyll/portmidi"
 	"math"
 	"os"
+	"sort"
 	"sync"
 	"time"
 )
 
 type Bus []float64
+
+// Ughhh this just needs to be at least as big as the audio processing
+// buffer size, no harm if it's bigger.
+const SAFE_BUF_LEN = 1024
+
+var out64 = [][]float64{
+	make([]float64, SAFE_BUF_LEN),
+	make([]float64, SAFE_BUF_LEN),
+	make([]float64, SAFE_BUF_LEN),
+	make([]float64, SAFE_BUF_LEN),
+}
+
+func getBus(n int) *float64 {
+	return &out64[n][0]
+}
 
 const sampleRate = 44100
 
@@ -53,11 +69,11 @@ func (bleeps Bleeps) noteOn(ugenName string, pitch int, vel int64) {
 	} else {
 		// alloc new note
 		freq := 440 * math.Pow(2, float64(pitch-69)/12)
-		amp := 0.08
+		amp := 0.0006 * float64(vel)
 		bleeps[pitch] = &PedalBleep{
 			pedal_hold: false,
 			ui:         ugens[ugenName].Create(),
-			param:      []*float64{nil, &freq, &amp},
+			param:      []*float64{getBus(0), &freq, &amp},
 		}
 	}
 }
@@ -95,60 +111,105 @@ func (bleeps Bleeps) pedalOff() {
 	}
 }
 
+func handleMidiEvent(ev portmidi.Event, bleeps Bleeps) {
+	fmt.Printf("MIDI: %d %d %d\n", ev.Status, ev.Data1, ev.Data2)
+	switch {
+	case ev.Status >= 0x90 && ev.Status < 0xa0:
+		if ev.Data1 < 21 {
+			fmt.Printf("UNEXPECTED LOW NOTE %+v\n", ev)
+			return
+		}
+		if ev.Data2 != 0 {
+			bleeps.noteOn("midi", int(ev.Data1), ev.Data2)
+		} else {
+			bleeps.noteOff(int(ev.Data1))
+		}
+	case ev.Status >= 0x80 && ev.Status < 0x90:
+		bleeps.noteOff(int(ev.Data1))
+	case ev.Status == 0xb0:
+		if ev.Data2 == 0 {
+			bleeps.pedalOff()
+		} else {
+			bleeps.pedalOn()
+		}
+	default:
+		fmt.Printf("UNEXPECTED MIDI: %+v\n", ev)
+	}
+}
+
 func listenMidi(in *portmidi.Stream, bleeps Bleeps) {
 	ch := in.Listen()
-	fmt.Printf("Listening...\n")
 	for {
+		fmt.Printf("Listening...\n")
 		select {
 		case ev := <-ch:
-			switch {
-			case ev.Status >= 0x90 && ev.Status < 0xa0:
-				if ev.Data2 != 0 {
-					bleeps.noteOn("midi", int(ev.Data1), ev.Data2)
-				} else {
-					bleeps.noteOff(int(ev.Data1))
-				}
-			case ev.Status >= 0x80 && ev.Status < 0x90:
-				bleeps.noteOff(int(ev.Data1))
-			case ev.Status == 0xb0:
-				if ev.Data2 == 0 {
-					bleeps.pedalOff()
-				} else {
-					bleeps.pedalOn()
-				}
-			default:
-				fmt.Printf("%+v\n", ev)
-			}
+			handleMidiEvent(ev, bleeps)
 		}
 	}
 }
 
+// Some profiling stuff
 var inner time.Duration
 var innerCount int64
 
-var percOdom int
-var percs = make(map[int]*PedalBleep)
-
 type PedalBleep struct {
 	pedal_hold bool
+	priority   float64
 	ui         *ugen.Uinst
 	param      []*float64
 }
 
 type Bleeps map[int]*PedalBleep
 
+var percOdom int
+var percs = Bleeps(make(map[int]*PedalBleep))
 var bleeps = Bleeps(make(map[int]*PedalBleep))
 var ugens = make(map[string]*ugen.Ugen)
 
-func genOn(ugenName string, pitch int, vel float64) int {
+type ByPriority struct {
+	Ix     []int
+	Bleeps map[int]*PedalBleep
+}
+
+func (a ByPriority) Len() int      { return len(a.Ix) }
+func (a ByPriority) Swap(i, j int) { a.Ix[i], a.Ix[j] = a.Ix[j], a.Ix[i] }
+func (a ByPriority) Less(i, j int) bool {
+	return a.Bleeps[a.Ix[i]].priority < a.Bleeps[a.Ix[j]].priority
+}
+
+func (bleeps Bleeps) priOrder() []int {
+	ix := []int{}
+	for k, _ := range percs {
+		ix = append(ix, k)
+	}
+	sort.Sort(ByPriority{
+		Ix:     ix,
+		Bleeps: bleeps,
+	})
+	return ix
+}
+
+func filterOn(ugenName string, priority float64, param []*float64) int {
+	id := percOdom
+	percOdom++
+	percs[id] = &PedalBleep{
+		ui:       ugens[ugenName].Create(),
+		param:    param,
+		priority: priority,
+	}
+	return id
+}
+
+// assumes mutex already held
+func genOn(ugenName string, priority float64, pitch int, vel float64) int {
 	id := percOdom
 	percOdom++
 	freq := 440 * math.Pow(2, float64(pitch-69)/12)
 	amp := 0.01 * vel
 	percs[id] = &PedalBleep{
-		pedal_hold: false,
-		ui:         ugens[ugenName].Create(),
-		param:      []*float64{nil, &freq, &amp},
+		ui:       ugens[ugenName].Create(),
+		param:    []*float64{getBus(1), &freq, &amp},
+		priority: priority,
 	}
 	return id
 }
@@ -170,13 +231,14 @@ func processAudio(out [][]float32) {
 	start := time.Now()
 	buflen := len(out[0])
 
-	out64 := [][]float64{
-		make([]float64, buflen),
-		make([]float64, buflen),
+	for i := range out[0] {
+		out64[0][i] = 0
+		out64[1][i] = 0
+		out64[2][i] = 0
+		out64[3][i] = 0
 	}
 
 	for i, osc := range bleeps {
-		osc.param[0] = &out64[0][0]
 		kill := osc.ui.Run(osc.param, buflen)
 		if kill {
 			bleeps[i].ui.Destroy()
@@ -185,8 +247,8 @@ func processAudio(out [][]float32) {
 		}
 	}
 
-	for i, osc := range percs {
-		osc.param[0] = &out64[0][0]
+	for _, i := range percs.priOrder() {
+		osc := percs[i]
 		kill := osc.ui.Run(osc.param, buflen)
 		if kill {
 			percs[i].ui.Destroy()
@@ -195,9 +257,9 @@ func processAudio(out [][]float32) {
 		}
 	}
 
-	for i := range out64[0] {
+	for i := range out[0] {
 		out[0][i] = float32(out64[0][i])
-		out[1][i] = float32(out64[0][i])
+		out[1][i] = float32(out64[1][i])
 	}
 
 	if f != nil {
@@ -246,6 +308,7 @@ func UnloadUgen(name string) {
 }
 
 func Run() {
+	chk(LoadUgen("./inst/spread.so", "spread"))
 	chk(LoadUgen("./inst/lead2.so", "midi"))
 	chk(LoadUgen("./inst/lead.so", "lead"))
 	chk(LoadUgen("./inst/bass.so", "bass"))
@@ -294,13 +357,16 @@ func Run() {
 			vel := 10.0
 			tempo := 1500 * time.Microsecond
 			for {
-				genOn("bass", 0, vel)
+				// XXX should grab lock here
+				genOn("bass", 0, 0, vel)
 				time.Sleep(300 * tempo)
-				genOn("snare", 0, vel)
+				genOn("snare", 0, 0, vel)
 				time.Sleep(300 * tempo)
 			}
 		}()
 	}
+
+	filterOn("spread", 100.0, []*float64{getBus(0), getBus(1)})
 
 	go func() {
 		for {
