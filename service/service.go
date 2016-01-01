@@ -3,18 +3,9 @@ package service
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
 )
-
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		// XXX could instead check that it's coming specifically from
-		// localhost:8080 or the like
-		return true
-	},
-}
 
 type WsCmdPre struct {
 	Action string          `json:"action"`
@@ -66,38 +57,46 @@ func (cmd *WsCmd) UnmarshalJSON(b []byte) (err error) {
 	return nil
 }
 
-type CmdHandler func(WsCmd)
+type CmdHandler func(WsCmd) (interface{}, error)
 
-func (cmdHandle CmdHandler) wsHandle(w http.ResponseWriter, r *http.Request) {
-	c, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Print("upgrade:", err)
+func (cmdHandle CmdHandler) rootHandle(rw http.ResponseWriter, req *http.Request) {
+
+	// Allow any origin
+	if origin := req.Header.Get("Origin"); origin != "" {
+		rw.Header().Set("Access-Control-Allow-Origin", origin)
+		rw.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
+		rw.Header().Set("Access-Control-Allow-Headers",
+			"Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
+	}
+	if req.Method == "OPTIONS" {
 		return
 	}
-	go func() {
-		defer c.Close()
-		for {
-			mt, message, err := c.ReadMessage()
-			if err != nil {
-				log.Println("read:", err)
-				break
-			}
-			if mt == websocket.TextMessage {
-				var cmd WsCmd
-
-				err := json.Unmarshal(message, &cmd)
-				if err != nil {
-					log.Println("json err:", err)
-					continue
-				}
-				cmdHandle(cmd)
-			}
-		}
-	}()
+	fmt.Printf("HERE\n")
+	decoder := json.NewDecoder(req.Body)
+	var cmd WsCmd
+	err := decoder.Decode(&cmd)
+	if err != nil {
+		rw.WriteHeader(401)
+		fmt.Fprintf(rw, "couldn't parse json (%+v): %s", req.Body, err)
+		return
+	}
+	resp, err := cmdHandle(cmd)
+	if err != nil {
+		rw.WriteHeader(500)
+		fmt.Fprintf(rw, "error handling command: %s", err)
+		return
+	}
+	str, err := json.Marshal(resp)
+	if err != nil {
+		rw.WriteHeader(500)
+		fmt.Fprintf(rw, "error encoding response object %+v: %s", err, resp)
+		return
+	}
+	fmt.Fprintf(rw, "%s", string(str))
 }
 
 func Initialize(addr string, cmdHandle CmdHandler) {
-	http.HandleFunc("/ws", cmdHandle.wsHandle)
+	http.HandleFunc("/", cmdHandle.rootHandle)
 	go func() {
 		log.Fatal(http.ListenAndServe(addr, nil))
 	}()

@@ -19,7 +19,6 @@
   "dependencies": {
     "body-parser": "^1.14.2",
     "express": "^4.13.3",
-    "underscore": "^1.8.3",
-    "websocket": "^1.0.22"
+    "underscore": "^1.8.3"
   }
 }

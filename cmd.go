@@ -1,13 +1,14 @@
 package gosynth
 
 import (
+	"fmt"
 	"github.com/jcreedcmu/gosynth/service"
 	"log"
 )
 
 var aliases = make(map[int]int)
 
-func cmdHandle(cmd service.WsCmd) {
+func cmdHandle(cmd service.WsCmd) (interface{}, error) {
 	mutex.Lock()
 	defer mutex.Unlock()
 
@@ -45,6 +46,7 @@ func cmdHandle(cmd service.WsCmd) {
 		aliases = make(map[int]int)
 		genAllOff()
 	default:
-		log.Printf("Unknown action %+v\n", cmd)
+		return nil, fmt.Errorf("Unknown action %+v\n", cmd)
 	}
+	return "ok", nil
 }

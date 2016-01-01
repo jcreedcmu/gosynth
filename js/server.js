@@ -1,6 +1,5 @@
 var express = require('express');
 var bodyParser = require('body-parser');
-var ws = require('websocket');
 var proc = require('child_process');
 var song = require('./beepbox/song');
 

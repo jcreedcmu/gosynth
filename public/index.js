@@ -4,30 +4,17 @@ $(go);
 
 function Remote() {}
 
-Remote.prototype.open = function() {
-  var ws = this.ws = new WebSocket("ws://" + window.location.hostname + ":8080/ws");
-  ws.onopen = function() {
-    console.log("open");
-  }
-  ws.onclose = function() {
-    console.log("closed");
-  }
-  return this.ws;
-}
-
-Remote.prototype.send = function(action, args) {
-  var ws = this.ws;
-  if (ws == null || ws.readyState == ws.CLOSED) {
-    ws = this.open();
-    var old = ws.onopen;
-    ws.onopen = function() {
-      ws.send(JSON.stringify({action: action, args: args}));
-      old();
+Remote.prototype.send = function(action, args, cb) {
+  $.ajax({
+    url : "http://" + window.location.hostname + ":8080",
+    type: "POST",
+    contentType: "text/json",
+    data: JSON.stringify({action: action, args: args}),
+    success: cb,
+    error: function (req, status, err) {
+      console.log(err, req.responseText);
     }
-  }
-  else {
-    ws.send(JSON.stringify({action: action, args: args}));
-  }
+  });
 }
 
 function go() {
