@@ -45,6 +45,10 @@ func cmdHandle(cmd service.WsCmd) (interface{}, error) {
 	case "halt":
 		aliases = make(map[int]int)
 		genAllOff()
+	case "schedule":
+		args := cmd.Args.(service.WsCmdSchedule)
+		log.Printf("%+v", args)
+		return globalTime, nil
 	default:
 		return nil, fmt.Errorf("Unknown action %+v\n", cmd)
 	}

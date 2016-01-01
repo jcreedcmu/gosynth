@@ -31,6 +31,13 @@ type WsCmdNote struct {
 	Pitch    int
 }
 
+type WsCmdSchedule struct {
+	Cmds []struct {
+		Time int64
+		Cmd  WsCmd
+	}
+}
+
 func (cmd *WsCmd) UnmarshalJSON(b []byte) (err error) {
 	var pre WsCmdPre
 	err = json.Unmarshal(b, &pre)
@@ -51,6 +58,11 @@ func (cmd *WsCmd) UnmarshalJSON(b []byte) (err error) {
 		}
 	case "halt":
 		cmd.Args = nil
+	case "schedule":
+		var post WsCmdSchedule
+		if err = json.Unmarshal(pre.Args, &post); err == nil {
+			cmd.Args = post
+		}
 	default:
 		return fmt.Errorf("Unrecognized cmd: %s", b)
 	}
