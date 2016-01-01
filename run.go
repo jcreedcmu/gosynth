@@ -8,7 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/gordonklaus/portaudio"
-	"github.com/rakyll/portmidi"
+	"github.com/youpy/go-coremidi"
 	"math"
 	"os"
 	"sort"
@@ -57,7 +57,7 @@ var pedal = false
 const STOP = 0
 const RESTART = 1
 
-func (bleeps Bleeps) noteOn(ugenName string, pitch int, vel int64) {
+func (bleeps Bleeps) noteOn(ugenName string, pitch int, vel int) {
 	mutex.Lock()
 	defer mutex.Unlock()
 
@@ -111,40 +111,36 @@ func (bleeps Bleeps) pedalOff() {
 	}
 }
 
-func handleMidiEvent(ev portmidi.Event, bleeps Bleeps) {
-	fmt.Printf("MIDI: %d %d %d\n", ev.Status, ev.Data1, ev.Data2)
+func handleMidiEvent(ev []byte, bleeps Bleeps) {
+	if len(ev) != 3 {
+		fmt.Printf("UNEXPECTED MIDI: %+v\n", ev)
+		return
+	}
+	status := int(ev[0])
+	data1 := int(ev[1])
+	data2 := int(ev[2])
+	fmt.Printf("MIDI: %d %d %d\n", status, data1, data2)
 	switch {
-	case ev.Status >= 0x90 && ev.Status < 0xa0:
-		if ev.Data1 < 21 {
+	case status >= 0x90 && status < 0xa0:
+		if data1 < 21 {
 			fmt.Printf("UNEXPECTED LOW NOTE %+v\n", ev)
 			return
 		}
-		if ev.Data2 != 0 {
-			bleeps.noteOn("midi", int(ev.Data1), ev.Data2)
+		if data2 != 0 {
+			bleeps.noteOn("midi", data1, data2)
 		} else {
-			bleeps.noteOff(int(ev.Data1))
+			bleeps.noteOff(data1)
 		}
-	case ev.Status >= 0x80 && ev.Status < 0x90:
-		bleeps.noteOff(int(ev.Data1))
-	case ev.Status == 0xb0:
-		if ev.Data2 == 0 {
+	case status >= 0x80 && status < 0x90:
+		bleeps.noteOff(data1)
+	case status == 0xb0:
+		if data2 == 0 {
 			bleeps.pedalOff()
 		} else {
 			bleeps.pedalOn()
 		}
 	default:
 		fmt.Printf("UNEXPECTED MIDI: %+v\n", ev)
-	}
-}
-
-func listenMidi(in *portmidi.Stream, bleeps Bleeps) {
-	ch := in.Listen()
-	for {
-		fmt.Printf("Listening...\n")
-		select {
-		case ev := <-ch:
-			handleMidiEvent(ev, bleeps)
-		}
 	}
 }
 
@@ -342,13 +338,20 @@ func Run() {
 	}
 
 	if true {
-		portmidi.Initialize()
-		in, err := portmidi.NewInputStream(portmidi.GetDefaultInputDeviceId(), 1024)
-		if err != nil {
-			fmt.Printf("ERROR initializing portmidi: %s\n", err)
-		} else {
-			go listenMidi(in, bleeps)
-			defer portmidi.Terminate()
+		client, err := coremidi.NewClient("midi client")
+		chk(err)
+		port, err := coremidi.NewInputPort(client, "test",
+			func(source coremidi.Source, event []byte) {
+				handleMidiEvent(event, bleeps)
+			})
+		chk(err)
+		sources, err := coremidi.AllSources()
+		chk(err)
+		for _, source := range sources {
+			//			func(source coremidi.Source) {
+			fmt.Printf("Listening to midi source %s [%s]\n", source.Name(), source.Manufacturer())
+			port.Connect(source)
+			//		}(source)
 		}
 	}
 
