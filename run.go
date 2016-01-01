@@ -42,6 +42,10 @@ var lobuf2 float64 = 0.0
 
 const reverbLen = 441000
 
+var globalTime int64 = 0 // in audio samples. A signed 32-bit number
+// would last 13 hours, but a signed 64-bit int goes about 6 million
+// years. Good enough for even Cage and Jem Finer.
+
 var reverbIx = 0
 var reverbBuf [reverbLen]float64
 var master_vol = 1.0
@@ -263,6 +267,7 @@ func processAudio(out [][]float32) {
 	}
 	inner = inner + time.Now().Sub(start)
 	innerCount++
+	globalTime += int64(buflen)
 }
 
 func wrapReverb(a int) float64 {
