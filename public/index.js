@@ -35,6 +35,15 @@ function go() {
 
   var odom = 100;
 
+  var adjust = function() {
+    rem.send("set_params", {
+      res_freq: 10 + 20 * $("#res_freq").val(),
+      q: 0.1 + 0.1 * $("#q").val(),
+    });
+  }
+  $("#res_freq").on("input", adjust);
+  $("#q").on("input", adjust);
+
   $("#note_on").on("click", function() {
     var id = odom++;
     rem.send("note", {

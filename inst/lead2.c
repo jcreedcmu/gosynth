@@ -15,7 +15,7 @@ typedef struct {
 #define ATTACK  600
 #define DECAY   1000
 #define SUSTAIN 0.4
-#define RELEASE 12000
+#define RELEASE 1200
 #define FALLOFF 0.000020
 
 int get_env(state_t *state, double *env) {

@@ -358,30 +358,36 @@ func Run() {
 		}
 	}
 
-	if false {
+	if true {
 		go func() {
-			vel := 10.0
-			tempo := 1500 * time.Microsecond
+			vel := 7.0
+			pri := 75.0
+			tempo := 2500 * time.Microsecond
 			for {
 				// XXX should grab lock here
-				genOn("bass", 0, 0, vel)
+				genOn("bass", pri, 0, vel)
 				time.Sleep(200 * tempo)
-				genOn("snare", 0, 0, vel)
+				genOn("snare", pri, 0, 2.0*vel)
 				time.Sleep(200 * tempo)
-				genOn("bass", 0, 0, vel)
+				genOn("bass", pri, 0, vel)
 				time.Sleep(100 * tempo)
-				genOn("bass", 0, 0, vel/2)
+				genOn("snare", pri, 0, vel/2)
+				time.Sleep(60 * tempo)
+				genOn("snare", pri, 0, vel/5)
+				time.Sleep(40 * tempo)
+				genOn("snare", pri, 0, 2.0*vel)
 				time.Sleep(100 * tempo)
-				genOn("snare", 0, 0, vel)
-				time.Sleep(200 * tempo)
-
+				genOn("bass", pri, 0, vel/2)
+				time.Sleep(60 * tempo)
+				genOn("bass", pri, 0, vel/2)
+				time.Sleep(40 * tempo)
 			}
 		}()
 	}
 
-	filterOn("reverb", 99.0, []*float64{getBus(0)})
-	filterOn("lopass", 100.0, []*float64{getBus(0), &resFreq, &Q})
-	filterOn("spread", 101.0, []*float64{getBus(0), getBus(1)})
+	filterOn("reverb", 80.0, []*float64{getBus(0)})
+	filterOn("lopass", 90.0, []*float64{getBus(0), &resFreq, &Q})
+	filterOn("spread", 100.0, []*float64{getBus(0), getBus(1)})
 
 	go func() {
 		for {

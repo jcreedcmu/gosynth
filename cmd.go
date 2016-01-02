@@ -66,6 +66,10 @@ func cmdHandleLocked(cmd service.WsCmd) (interface{}, error) {
 			heap.Push(&queue, tcmd)
 		}
 		return TimeResp{Time: globalTime}, nil
+	case "set_params":
+		args := cmd.Args.(service.WsCmdSetParams)
+		resFreq = args.ResFreq
+		Q = args.Q
 	default:
 		return nil, fmt.Errorf("Unknown action %+v\n", cmd)
 	}

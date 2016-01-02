@@ -3,18 +3,20 @@ var bodyParser = require('body-parser');
 var proc = require('child_process');
 var song = require('./beepbox/song');
 
-var mk = proc.spawn('make', process.argv.slice(2));
-mk.on('message', function(x) {
-  console.log(x);
-});
-mk.stdout.on('data', function (data) {
-  data = data.toString().replace(/\n$/, '');
-  console.log('OUT ' + data);
-});
-mk.stderr.on('data', function (data) {
-  data = data.toString().replace(/\n$/, '');
-  console.log('ERR ' + data);
-});
+if (process.argv[2] != '--solo') {
+  var mk = proc.spawn('make', process.argv.slice(2));
+  mk.on('message', function(x) {
+    console.log(x);
+  });
+  mk.stdout.on('data', function (data) {
+    data = data.toString().replace(/\n$/, '');
+    console.log('OUT ' + data);
+  });
+  mk.stderr.on('data', function (data) {
+    data = data.toString().replace(/\n$/, '');
+    console.log('ERR ' + data);
+  });
+}
 
 var app = express();
 app.use(bodyParser.text({type: "text/plain"}));

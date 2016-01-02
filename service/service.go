@@ -41,6 +41,11 @@ type WsCmdSchedule struct {
 	Cmds     []TimedCmd
 }
 
+type WsCmdSetParams struct {
+	ResFreq float64 `json:"res_freq"`
+	Q       float64
+}
+
 func (cmd *WsCmd) UnmarshalJSON(b []byte) (err error) {
 	var pre WsCmdPre
 	err = json.Unmarshal(b, &pre)
@@ -63,6 +68,11 @@ func (cmd *WsCmd) UnmarshalJSON(b []byte) (err error) {
 		cmd.Args = nil
 	case "schedule":
 		var post WsCmdSchedule
+		if err = json.Unmarshal(pre.Args, &post); err == nil {
+			cmd.Args = post
+		}
+	case "set_params":
+		var post WsCmdSetParams
 		if err = json.Unmarshal(pre.Args, &post); err == nil {
 			cmd.Args = post
 		}
