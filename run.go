@@ -358,7 +358,7 @@ func Run() {
 		}
 	}
 
-	if true {
+	if false {
 		go func() {
 			vel := 7.0
 			pri := 75.0

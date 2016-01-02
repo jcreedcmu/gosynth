@@ -1,4 +1,29 @@
-var song_data = "5sbk3l00e0ft1a7g0fj7i0r0w5211f1130d1111c1100h0000v0011o3410b000id5pUlDwid18Q4zgid18Q4zgid5pU4hgh528z8ycp278FHyYBwpf1imFd4GOCmhFD-1ceo6CgjiQgpllc7j71FJAugJJd7IzOGqqH86CGKOWgUhOCosmCDPSWWo2KOSW-1FGVFjb0g3jbxc_g9xP0QOaqnocGGC3FzXj9mswXiqfF7BnQSTg5dltBIBMxwbceYXCHKmkRlSmTnM5diqvassrKQO0kNUFj3w6jjA0Pon81AQV0e9gCg39FO0oLtA0Oqsw74Ef81AQV0clKO0pdeg3CSV0cCD8190wMp6i39O0qCopgNV49i3rOqI2PJ9LObqgrujlwv67ihv8wWgrujlwecKAH1AmQwSYCH0Kc6Ay-hni3rOqI_6rilwObqgrujl1QpyTBYiFEwXcORcee9SpeyWKlUzbMyIPWoD3j0AxAzOi79M450cD9i0z81IV8a0peiO0Csw7pOgk0OsDycw6PAwE1JQkpk1tSxVFewd0q6o4pj80"; // himenepit
+var colors = [  "#00f", "black", "red", "black", "yellow", "orange",
+                "black", "#0a0", "black", "magenta", "black", "#0ff"];
+var names = [  "C", "C#", "D", "Eb", "E", "F",
+               "F#", "G", "Ab", "A", "Bb", "B"];
+var PIXEL = 1 / devicePixelRatio;
+
+var fadedColors = colors.map(function(color) {
+  return tinycolor.mix(color, "gray", 80).toHexString();
+});
+
+LEFT_MARGIN = 30;
+
+var state = {
+  song: {
+    notes: [
+      {start: 0, len: 5, pitch: 60},
+      {start: 5, len: 3, pitch: 59},
+      {start: 8, len: 2, pitch: 58},
+      {start: 10, len: 0.5, pitch: 57},
+      {start: 10.5, len: 0.5, pitch: 56},
+    ],
+    beatsPerBar: 32,
+  },
+  playhead: 5, // in beats
+  pitchWindow: {start: 48, len: 24},
+ }
 
 $(go);
 
@@ -66,23 +91,10 @@ function go() {
     window.playing = false;
   });
   $("#play").on("click", function() {
-    $.ajax({
-      url : "/parse",
-      type: "POST",
-      contentType: "text/plain",
-      processData: false,
-      data: song_data,
-      success: function(data, status, req) {
-        window.parsed_data = data;
-        render(data);
-        startPlayback(data, getAgenda(data));
-      },
-      error: function (req, status, err) {
-        console.log(err);
-      }
-    });
+    startPlayback(state);
   });
 
+  render(state, 1);
 }
 
 var PAT_WIDTH = 50;
@@ -95,45 +107,90 @@ function stopBeeps() {
 }
 
 // playhead in beats
-function render(data, playhead) {
-  var w_scale = PAT_WIDTH / beatsPerBar(data);
+function render(state) {
+  var song = state.song;
+  var playhead = state.playhead;
   var c = $("#c")[0];
   var d = c.getContext('2d');
-  var w = c.width = 1000;
-  var h = c.height = 500;
-  d.fillRect(0,0,w,h);
-  for (var chan = 0; chan < data.channelBars.length; chan++) {
-    var bars = data.channelBars[chan];
-    for (var bar = 0; bar < bars.length; bar++) {
-      d.fillStyle = "white";
-      d.strokeStyle = "blue";
-      d.lineWidth = 1;
-      d.fillText(bars[bar], bar * PAT_WIDTH + 5, chan * PAT_HEIGHT + 15);
-      d.strokeRect(bar * PAT_WIDTH, chan * PAT_HEIGHT, PAT_WIDTH, PAT_HEIGHT);
-      if (bars[bar] > 0) {
-        d.fillStyle = ["red", "yellow", "green", "blue"][chan];
-        data.channelPatterns[chan][bars[bar]-1].tones.forEach(function(tone) {
-          tone.notes.forEach(function(note) {
-            d.fillRect(
-              bar * PAT_WIDTH + tone.start * w_scale,
-              chan * PAT_HEIGHT + 75 - note,
-              (tone.end - tone.start) * w_scale,
-              2
-            );
-          });
-        });
-      }
-    }
+  var w, h;
+  c.width = (w = 1000) * devicePixelRatio;;
+  c.height = (h = 500) * devicePixelRatio;
+  c.style.width = w + "px";
+  c.style.height = h + "px";
+  d.save();
+  d.scale(devicePixelRatio, devicePixelRatio);
+
+  var h_scale = (w - LEFT_MARGIN) / song.beatsPerBar;
+  var v_scale = h / state.pitchWindow.len;
+
+// background
+  for (var p = 0; p < state.pitchWindow.len; p++) {
+    var pitchClass = (p + state.pitchWindow.start) % 12;
+    d.save();
+    d.fillStyle = fadedColors[pitchClass];
+    d.fillRect(0, Math.floor(h - (p + 1) * v_scale), w,
+               Math.floor(h - (p) * v_scale) - Math.floor(h - (p + 1) * v_scale));
+    d.fillStyle = "white"
+    d.globalAlpha = 0.5
+    d.fillText(names[pitchClass], 10, Math.floor(h - (p + 0.35) * v_scale));
+    d.restore();
+
   }
+
+  for (var i = 0; i < song.notes.length; i++) {
+    var note = song.notes[i];
+    var pitchClass = note.pitch % 12;
+    var p = note.pitch - state.pitchWindow.start;
+
+    d.fillStyle = colors[pitchClass];
+    d.fillRect(Math.floor(LEFT_MARGIN + note.start * h_scale),
+               Math.floor(h - (p + 1) * v_scale),
+               Math.floor(LEFT_MARGIN + (note.start + note.len) * h_scale) -
+               Math.floor(LEFT_MARGIN + note.start * h_scale),
+               Math.floor(h - (p) * v_scale) - Math.floor(h - (p + 1) * v_scale));
+  }
+
+  // grid
+  for (var i = 0; i < song.beatsPerBar; i++) {
+    var width = i % 8 == 0 ? 5 : i % 4 == 0 ? 3 : i % 2 == 0 ? 2 : 1
+    var xpos = Math.floor(LEFT_MARGIN + i * h_scale) + width * PIXEL / 2;
+    d.beginPath();
+    d.moveTo(xpos,0);
+    d.lineTo(xpos, h);
+    d.strokeStyle = "black";
+    d.lineWidth = width * PIXEL;
+    d.stroke();
+  }
+
+  // d.fillStyle = "white";
+  // d.strokeStyle = "blue";
+  // d.lineWidth = 1;
+  // d.fillText(bars[bar], bar * PAT_WIDTH + 5, chan * PAT_HEIGHT + 15);
+  // d.strokeRect(bar * PAT_WIDTH, chan * PAT_HEIGHT, PAT_WIDTH, PAT_HEIGHT);
+  // if (bars[bar] > 0) {
+  //   d.fillStyle = ["red", "yellow", "green", "blue"][chan];
+  //   data.channelPatterns[chan][bars[bar]-1].tones.forEach(function(tone) {
+  //     tone.notes.forEach(function(note) {
+  //       d.fillRect(
+  //         bar * PAT_WIDTH + tone.start * w_scale,
+  //         chan * PAT_HEIGHT + 75 - note,
+  //         (tone.end - tone.start) * w_scale,
+  //         2
+  //       );
+  //     });
+  //   });
+
+
   if (playhead != null) {
-    var xpos = playhead * w_scale;
+    var xpos = Math.floor(LEFT_MARGIN + playhead * h_scale) + PIXEL / 2;
     d.beginPath();
     d.moveTo(xpos,0);
     d.lineTo(xpos, h);
     d.strokeStyle = "white";
-    d.lineWidth = 2;
+    d.lineWidth = PIXEL;
     d.stroke();
   }
+  d.restore();
 }
 
 function beatsPerBar(data) {
