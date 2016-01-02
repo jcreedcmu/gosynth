@@ -14,17 +14,23 @@ LEFT_MARGIN = 30;
 var state = {
   song: {
     notes: [
-      {start: 0, len: 5, pitch: 60},
-      {start: 5, len: 3, pitch: 59},
-      {start: 8, len: 2, pitch: 58},
-      {start: 10, len: 0.5, pitch: 57},
-      {start: 10.5, len: 3.5, pitch: 62},
     ],
     beatsPerBar: 32,
   },
   playhead: 0, // in beats
   pitchWindow: {start: 48, len: 24},
  }
+
+for (var i = 0; i < 32; i++) {
+  var pitch;
+  if (i < 16) {
+    pitch = [59, 63, 66, 73][i % 4] - 4
+  }
+  else {
+    pitch = [59, 63, 66, 73][i % 4] - 6
+  }
+  state.song.notes.push({start: i , len: 1, pitch: pitch});
+}
 
 $(go);
 
@@ -135,6 +141,8 @@ function render(state) {
     var p = note.pitch - state.pitchWindow.start;
 
     d.fillStyle = colors[pitchClass];
+    if (playhead >= note.start && playhead <= note.start + note.len)
+      d.fillStyle = "white";
     d.fillRect(Math.floor(LEFT_MARGIN + note.start * h_scale),
                Math.floor(h - (p + 1) * v_scale),
                Math.floor(LEFT_MARGIN + (note.start + note.len) * h_scale) -
@@ -181,7 +189,7 @@ function getAgenda(data) {
                   args: {
                     on: true,
                     id: id_odom,
-                    ugenName: "midi",
+                    ugenName: "lead",
                     vel: 10,
                     pitch: note.pitch,
                   }}]);
@@ -228,7 +236,7 @@ function startPlayback(state) {
     })
     setTimeout(function() {
       if (state.playing) play_a_bit();
-    }, 50);
+    }, 25);
   }
   rem.send(
     "schedule", {},

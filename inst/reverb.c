@@ -25,7 +25,7 @@ int run(void *instance, double **param, int ix) {
     + tap(s, 5053) * 0.025
     + tap(s, 4053) * 0.025
     + tap(s, 5043) * 0.0125
-    + tap(s, 5557) * 0.025
+    + tap(s, 25557) * 0.125
     + tap(s, 24) * 0.05
     ;
   *out = s->buf[s->ix];
