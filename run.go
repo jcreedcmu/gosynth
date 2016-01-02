@@ -35,22 +35,15 @@ func getBus(n int) *float64 {
 
 const sampleRate = 44100
 
-const BQ = 5.7
-
-var lobuf1 float64 = 0.0
-var lobuf2 float64 = 0.0
-
-const reverbLen = 441000
-
 var globalTime int64 = 0 // in audio samples. A signed 32-bit number
 // would last 13 hours, but a signed 64-bit int goes about 6 million
 // years. Good enough for even Cage and Jem Finer.
 
-var reverbIx = 0
-var reverbBuf [reverbLen]float64
 var master_vol = 1.0
 var post_amp = 0.05
+
 var resFreq = 2646.2
+var Q = 1.0
 
 var bus Bus = make([]float64, 4)
 
@@ -192,6 +185,11 @@ func (bleeps Bleeps) priOrder() []int {
 func filterOn(ugenName string, priority float64, param []*float64) int {
 	id := percOdom
 	percOdom++
+	ugen := ugens[ugenName]
+	if ugen == nil {
+		fmt.Printf("No such ugen %s\n", ugenName)
+		return 0
+	}
 	percs[id] = &PedalBleep{
 		ui:       ugens[ugenName].Create(),
 		param:    param,
@@ -272,10 +270,6 @@ func processAudio(out [][]float32) {
 	innerCount++
 }
 
-func wrapReverb(a int) float64 {
-	return reverbBuf[(reverbIx+a)%reverbLen]
-}
-
 func openStream(cbk interface{}) (*portaudio.Stream, error) {
 	outDev, err := portaudio.DefaultOutputDevice()
 	if err != nil {
@@ -317,6 +311,7 @@ func Run() {
 	chk(LoadUgen("./inst/lead.so", "lead"))
 	chk(LoadUgen("./inst/bass.so", "bass"))
 	chk(LoadUgen("./inst/snare.so", "snare"))
+	chk(LoadUgen("./inst/lopass.so", "lopass"))
 
 	shouldRecord := flag.Bool("record", false, "whether to record")
 	addr := flag.String("addr", "localhost:8080", "http service address")
@@ -385,7 +380,8 @@ func Run() {
 	}
 
 	filterOn("reverb", 99.0, []*float64{getBus(0)})
-	filterOn("spread", 100.0, []*float64{getBus(0), getBus(1)})
+	filterOn("lopass", 100.0, []*float64{getBus(0), &resFreq, &Q})
+	filterOn("spread", 101.0, []*float64{getBus(0), getBus(1)})
 
 	go func() {
 		for {
@@ -414,52 +410,6 @@ func overdrive(n int, LIMIT float64) func(bus Bus) {
 		}
 		bus[n] = w
 	}
-}
-
-var lopass_phase = 0.0
-
-func lopass(resFreq float64, Q float64) func(bus Bus) {
-	// Compute some params for the low-pass
-	return func(bus Bus) {
-		// _, lopass_phase = math.Modf(lopass_phase + 0.1/sampleRate)
-		// rf := resFreq * (1 + 0.5*math.Sin(2.0*3.142*lopass_phase))
-		rf := resFreq
-		S := sampleRate / (2 * math.Pi * rf)
-		Q := BQ
-		A := -(S/Q + 2.0*S*S) / (1.0 + S/Q + S*S)
-		B := (S * S) / (1.0 + S/Q + S*S)
-		C := 10.0 / (1.0 + S/Q + S*S)
-
-		w := bus[0]
-		lo_out := C*w - A*lobuf1 - B*lobuf2
-		lobuf2 = lobuf1
-		lobuf1 = lo_out
-
-		// wet/dry mix
-		bus[0] = w*0.05 + lo_out*0.95
-	}
-}
-
-// reverb
-func reverb(bus Bus) {
-	reverbIx = (reverbIx + reverbLen - 1) % reverbLen
-	reverbBuf[reverbIx] = bus[0] +
-		wrapReverb(2932)*0.15 +
-		wrapReverb(5053)*0.025 +
-		wrapReverb(4052)*0.025 +
-		wrapReverb(143)*0.2 +
-		wrapReverb(24)*0.05
-	bus[0] = post_amp * reverbBuf[reverbIx]
-}
-
-// spread
-func spread(bus Bus) {
-	bus[1] = bus[0]
-}
-
-// spread
-func join(bus Bus) {
-	bus[0] += bus[2]
 }
 
 // Utils
