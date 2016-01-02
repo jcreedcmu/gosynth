@@ -7,7 +7,14 @@ import (
 	"log"
 )
 
+type CmdQueue []service.TimedCmd
+
+type TimeResp struct {
+	Time int64 `json:"time"`
+}
+
 var aliases = make(map[int]int)
+var queue = make(CmdQueue, 0)
 
 func cmdHandle(cmd service.WsCmd) (interface{}, error) {
 	mutex.Lock()
@@ -48,6 +55,7 @@ func cmdHandleLocked(cmd service.WsCmd) (interface{}, error) {
 		}
 	case "halt":
 		aliases = make(map[int]int)
+		queue = make(CmdQueue, 0)
 		genAllOff()
 	case "schedule":
 		args := cmd.Args.(service.WsCmdSchedule)
@@ -57,16 +65,12 @@ func cmdHandleLocked(cmd service.WsCmd) (interface{}, error) {
 			}
 			heap.Push(&queue, tcmd)
 		}
-		return globalTime, nil
+		return TimeResp{Time: globalTime}, nil
 	default:
 		return nil, fmt.Errorf("Unknown action %+v\n", cmd)
 	}
 	return "ok", nil
 }
-
-type CmdQueue []service.TimedCmd
-
-var queue = make(CmdQueue, 0)
 
 func (pq CmdQueue) Len() int { return len(pq) }
 

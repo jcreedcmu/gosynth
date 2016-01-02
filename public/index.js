@@ -9,6 +9,7 @@ Remote.prototype.send = function(action, args, cb) {
     url : "http://" + window.location.hostname + ":8080",
     type: "POST",
     contentType: "text/plain",
+    dataType: "json",
     data: JSON.stringify({action: action, args: args}),
     success: cb,
     error: function (req, status, err) {
@@ -53,6 +54,7 @@ function go() {
 
   $("#stop").on("click", function() {
     stopBeeps();
+    window.playing = false;
   });
   $("#play").on("click", function() {
     $.ajax({
@@ -62,7 +64,7 @@ function go() {
       processData: false,
       data: song_data,
       success: function(data, status, req) {
-        playBeeps(data);
+        startPlayback(getAgenda(data));
       },
       error: function (req, status, err) {
         console.log(err);
@@ -81,9 +83,38 @@ function stopBeeps() {
   rem.send("halt", {});
 }
 
-function playBeeps(data) {
-  window.data = data;
-  //console.log(data);
+function render(data) {
+  var c = $("#c")[0];
+  var d = c.getContext('2d');
+  var w = c.width = 1000;
+  var h = c.height = 500;
+  d.fillRect(0,0,w,h);
+  for (var chan = 0; chan < data.channelBars.length; chan++) {
+    var bars = data.channelBars[chan];
+    for (var bar = 0; bar < bars.length; bar++) {
+      d.fillStyle = "white";
+      d.strokeStyle = "blue";
+      d.lineWidth = 1;
+      d.fillText(bars[bar], bar * PAT_WIDTH + 5, chan * PAT_HEIGHT + 15);
+      d.strokeRect(bar * PAT_WIDTH, chan * PAT_HEIGHT, PAT_WIDTH, PAT_HEIGHT);
+      if (bars[bar] > 0) {
+        d.fillStyle = ["red", "yellow", "green", "blue"][chan];
+        data.channelPatterns[chan][bars[bar]-1].tones.forEach(function(tone) {
+          tone.notes.forEach(function(note) {
+            d.fillRect(
+              bar * PAT_WIDTH + tone.start * w_scale,
+              chan * PAT_HEIGHT + 75 - note,
+              (tone.end - tone.start) * w_scale,
+              2
+            );
+          });
+        });
+      }
+    }
+  }
+}
+
+function getAgenda(data) {
   var id_odom = 0;
   var agenda = [];
 
@@ -133,22 +164,35 @@ function playBeeps(data) {
       }
     }
   }
-  agenda = _.sortBy(agenda, function(x) { return x[0]; });
-  window.agenda_timeout = setTimeout(function() {
-    play_agenda(agenda, 0);
-  }, 0);
+  return _.sortBy(agenda, function(x) { return x[0]; });
 }
 
-function play_agenda(agenda, ix) {
-  var item = agenda[ix];
-  var time = item[0];
-  var cmd = item[1];
-  rem.send(cmd.action, cmd.args);
-  if (ix+1 < agenda.length) {
-    var dt = agenda[ix+1][0] - time;
-    window.agenda_timeout =
-      setTimeout(function() {
-        play_agenda(agenda, ix+1);
-      }, dt * 75);
+function stopPlayback() {
+
+}
+function startPlayback(agenda) {
+  window.playing = true;
+  var beatSamples = 0.075 * 44100;
+  var play_head = 0; // samples
+  var i = 0; // position in agenda
+  var server_time = 0; // samples
+  function play_a_bit() {
+    var cmds = [];
+    for (; i < agenda.length && server_time + agenda[i][0] * beatSamples < play_head + 10000; i++) {
+      cmds.push({time: Math.floor(server_time + agenda[i][0] * beatSamples),
+                  cmd: agenda[i][1]});
+    }
+    rem.send("schedule", {cmds: cmds}, function(data) {
+      play_head = data.time;
+    })
+    setTimeout(function() {
+      if (window.playing) play_a_bit();
+    }, 100);
   }
+  rem.send(
+    "schedule", {},
+    function(data) {
+      server_time = data.time + 10000; // leave a little gap here to be sure we can start playing on time
+      play_a_bit();
+    })
 }

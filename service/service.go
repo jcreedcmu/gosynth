@@ -69,7 +69,7 @@ func (cmd *WsCmd) UnmarshalJSON(b []byte) (err error) {
 	default:
 		return fmt.Errorf("Unrecognized cmd: %s", b)
 	}
-	return nil
+	return
 }
 
 type CmdHandler func(WsCmd) (interface{}, error)
@@ -87,7 +87,7 @@ func (cmdHandle CmdHandler) rootHandle(rw http.ResponseWriter, req *http.Request
 	var cmd WsCmd
 	err := decoder.Decode(&cmd)
 	if err != nil {
-		rw.WriteHeader(401)
+		rw.WriteHeader(400)
 		fmt.Fprintf(rw, "couldn't parse json (%+v): %s", req.Body, err)
 		return
 	}
