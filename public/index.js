@@ -1,11 +1,12 @@
-var colors = [  "#00f", "black", "red", "black", "yellow", "orange",
-                "black", "#0a0", "black", "magenta", "black", "#0ff"];
+var dark = "#444";
+var colors = [  "#00f", dark, "red", dark, "yellow", "orange",
+                dark, "#0a0", dark, "magenta", dark, "#0ff"];
 var names = [  "C", "C#", "D", "Eb", "E", "F",
                "F#", "G", "Ab", "A", "Bb", "B"];
 var PIXEL = 1 / devicePixelRatio;
 
 var fadedColors = colors.map(function(color) {
-  return tinycolor.mix(color, "gray", 80).toHexString();
+  return tinycolor.mix(color, "#999", 80).toHexString();
 });
 
 LEFT_MARGIN = 30;
@@ -17,11 +18,11 @@ var state = {
       {start: 5, len: 3, pitch: 59},
       {start: 8, len: 2, pitch: 58},
       {start: 10, len: 0.5, pitch: 57},
-      {start: 10.5, len: 0.5, pitch: 56},
+      {start: 10.5, len: 3.5, pitch: 62},
     ],
     beatsPerBar: 32,
   },
-  playhead: 5, // in beats
+  playhead: 0, // in beats
   pitchWindow: {start: 48, len: 24},
  }
 
@@ -87,23 +88,13 @@ function go() {
   });
 
   $("#stop").on("click", function() {
-    stopBeeps();
-    window.playing = false;
+    stopPlayback(state);
   });
   $("#play").on("click", function() {
     startPlayback(state);
   });
 
-  render(state, 1);
-}
-
-var PAT_WIDTH = 50;
-
-var PAT_HEIGHT = 80;
-
-function stopBeeps() {
-  clearInterval(window.agenda_timeout);
-  rem.send("halt", {});
+  render(state);
 }
 
 // playhead in beats
@@ -123,7 +114,7 @@ function render(state) {
   var h_scale = (w - LEFT_MARGIN) / song.beatsPerBar;
   var v_scale = h / state.pitchWindow.len;
 
-// background
+  // background
   for (var p = 0; p < state.pitchWindow.len; p++) {
     var pitchClass = (p + state.pitchWindow.start) % 12;
     d.save();
@@ -137,6 +128,7 @@ function render(state) {
 
   }
 
+  // notes
   for (var i = 0; i < song.notes.length; i++) {
     var note = song.notes[i];
     var pitchClass = note.pitch % 12;
@@ -162,26 +154,8 @@ function render(state) {
     d.stroke();
   }
 
-  // d.fillStyle = "white";
-  // d.strokeStyle = "blue";
-  // d.lineWidth = 1;
-  // d.fillText(bars[bar], bar * PAT_WIDTH + 5, chan * PAT_HEIGHT + 15);
-  // d.strokeRect(bar * PAT_WIDTH, chan * PAT_HEIGHT, PAT_WIDTH, PAT_HEIGHT);
-  // if (bars[bar] > 0) {
-  //   d.fillStyle = ["red", "yellow", "green", "blue"][chan];
-  //   data.channelPatterns[chan][bars[bar]-1].tones.forEach(function(tone) {
-  //     tone.notes.forEach(function(note) {
-  //       d.fillRect(
-  //         bar * PAT_WIDTH + tone.start * w_scale,
-  //         chan * PAT_HEIGHT + 75 - note,
-  //         (tone.end - tone.start) * w_scale,
-  //         2
-  //       );
-  //     });
-  //   });
-
-
-  if (playhead != null) {
+  // playhead
+  if (state.playing && playhead != null) {
     var xpos = Math.floor(LEFT_MARGIN + playhead * h_scale) + PIXEL / 2;
     d.beginPath();
     d.moveTo(xpos,0);
@@ -201,65 +175,65 @@ function getAgenda(data) {
   var id_odom = 0;
   var agenda = [];
 
-  for (var chan = 0; chan < data.channelBars.length; chan++) {
-    var bars = data.channelBars[chan];
-    for (var bar = 0; bar < bars.length; bar++) {
-      if (bars[bar] > 0) {
-        data.channelPatterns[chan][bars[bar]-1].tones.forEach(function(tone) {
-          tone.notes.forEach(function(note) {
-            if (chan != 3) {
-              agenda.push([bar * beatsPerBar(data) + tone.start,
-                           {action: "note",
-                            args: {
-                              on: true,
-                              id: id_odom,
-                              ugenName: chan == 2 ? "lead" : "midi",
-                              vel: 10,
-                              pitch: note + 12,
-                            }}]);
-              agenda.push([bar * beatsPerBar(data) + tone.end,
-                           {action: "note",
-                            args: {
-                              on: false,
-                              id: id_odom,
-                            }}]);
-              id_odom++;
-            }
-          });
-        });
-      }
-    }
-  }
+  data.notes.forEach(function(note) {
+    agenda.push([note.start,
+                 {action: "note",
+                  args: {
+                    on: true,
+                    id: id_odom,
+                    ugenName: "midi",
+                    vel: 10,
+                    pitch: note.pitch,
+                  }}]);
+    agenda.push([note.start + note.len,
+                 {action: "note",
+                  args: {
+                    on: false,
+                    id: id_odom,
+                  }}]);
+    id_odom++;
+  });
   return _.sortBy(agenda, function(x) { return x[0]; });
 }
 
-function stopPlayback() {
-
+function stopPlayback(state) {
+  rem.send("halt", {});
+  state.playing = false;
+  render(state);
 }
-function startPlayback(songdata, agenda) {
-  window.playing = true;
+
+function startPlayback(state) {
+  var agenda = getAgenda(state.song)
+  state.playing = true;
   var beatSamples = 0.15 * 44100;
-  var play_head = 0; // samples
+  var cur_time;
   var i = 0; // position in agenda
-  var server_time = 0; // samples
+  var start_time = 0; // samples
+
   function play_a_bit() {
-    render(songdata, (play_head - server_time) / beatSamples );
     var cmds = [];
-    for (; i < agenda.length && server_time + agenda[i][0] * beatSamples < play_head + 10000; i++) {
-      cmds.push({time: Math.floor(server_time + agenda[i][0] * beatSamples),
+    if (i >= agenda.length) {
+      state.playing = false;
+      render(state);
+      return;
+    }
+    for (; i < agenda.length && start_time + agenda[i][0] * beatSamples < cur_time + 10000; i++) {
+      cmds.push({time: Math.floor(start_time + agenda[i][0] * beatSamples),
                   cmd: agenda[i][1]});
     }
     rem.send("schedule", {cmds: cmds}, function(data) {
-      play_head = data.time;
+      cur_time = data.time;
+      state.playhead = (cur_time - start_time) / beatSamples;
+      render(state);
     })
     setTimeout(function() {
-      if (window.playing) play_a_bit();
-    }, 100);
+      if (state.playing) play_a_bit();
+    }, 50);
   }
   rem.send(
     "schedule", {},
     function(data) {
-      server_time = data.time + 10000; // leave a little gap here to be sure we can start playing on time
+      start_time = data.time + 10000; // leave a little gap here to be sure we can start playing on time
       play_a_bit();
     })
 }
