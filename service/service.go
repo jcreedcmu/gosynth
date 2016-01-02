@@ -31,11 +31,14 @@ type WsCmdNote struct {
 	Pitch    int
 }
 
+type TimedCmd struct {
+	Time int64
+	Cmd  WsCmd
+}
+
 type WsCmdSchedule struct {
-	Cmds []struct {
-		Time int64
-		Cmd  WsCmd
-	}
+	Relative bool
+	Cmds     []TimedCmd
 }
 
 func (cmd *WsCmd) UnmarshalJSON(b []byte) (err error) {

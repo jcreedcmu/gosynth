@@ -265,9 +265,11 @@ func processAudio(out [][]float32) {
 	if f != nil {
 		chk(binary.Write(f, binary.BigEndian, out[0]))
 	}
+	globalTime += int64(buflen)
+	FlushCmdQueueLocked(globalTime)
+
 	inner = inner + time.Now().Sub(start)
 	innerCount++
-	globalTime += int64(buflen)
 }
 
 func wrapReverb(a int) float64 {
@@ -361,7 +363,7 @@ func Run() {
 		}
 	}
 
-	if true {
+	if false {
 		go func() {
 			vel := 10.0
 			tempo := 1500 * time.Microsecond
