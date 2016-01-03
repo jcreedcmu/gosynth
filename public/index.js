@@ -4,6 +4,7 @@ var colors = [  "#00f", dark, "red", dark, "yellow", "orange",
 var names = [  "C", "C#", "D", "Eb", "E", "F",
                "F#", "G", "Ab", "A", "Bb", "B"];
 var PIXEL = 1 / devicePixelRatio;
+var playIntervalMs = 50;
 
 var fadedColors = colors.map(function(color) {
   return tinycolor.mix(color, "#999", 80).toHexString();
@@ -23,13 +24,14 @@ var state = {
 
 for (var i = 0; i < 32; i++) {
   var pitch;
+  var arpeg = [73, 59, 63, 66];
   if (i < 16) {
-    pitch = [59, 63, 66, 73][i % 4] - 4
+    pitch = arpeg[i % 4] - 6
   }
   else {
-    pitch = [59, 63, 66, 73][i % 4] - 6
+    pitch = arpeg[i % 4] - 5
   }
-  state.song.notes.push({start: i , len: 1, pitch: pitch});
+  state.song.notes.push({start: i , len: i % 3 ? 1/8 : 2, pitch: pitch});
 }
 
 $(go);
@@ -141,7 +143,7 @@ function render(state) {
     var p = note.pitch - state.pitchWindow.start;
 
     d.fillStyle = colors[pitchClass];
-    if (playhead >= note.start && playhead <= note.start + note.len)
+    if (playhead >= note.start && playhead <= note.start + note.len + 1)
       d.fillStyle = "white";
     d.fillRect(Math.floor(LEFT_MARGIN + note.start * h_scale),
                Math.floor(h - (p + 1) * v_scale),
@@ -189,7 +191,7 @@ function getAgenda(data) {
                   args: {
                     on: true,
                     id: id_odom,
-                    ugenName: "lead",
+                    ugenName: "midi",
                     vel: 10,
                     pitch: note.pitch,
                   }}]);
@@ -213,7 +215,7 @@ function stopPlayback(state) {
 function startPlayback(state) {
   var agenda = getAgenda(state.song)
   state.playing = true;
-  var beatSamples = 0.15 * 44100;
+  var beatSamples = 0.25 * 44100;
   var cur_time;
   var i = 0; // position in agenda
   var start_time = 0; // samples
@@ -236,7 +238,7 @@ function startPlayback(state) {
     })
     setTimeout(function() {
       if (state.playing) play_a_bit();
-    }, 25);
+    }, playIntervalMs);
   }
   rem.send(
     "schedule", {},
