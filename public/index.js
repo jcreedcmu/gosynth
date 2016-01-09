@@ -1,13 +1,34 @@
 var dark = "#444";
 var colors = [  "#00f", dark, "red", dark, "yellow", "orange",
                 dark, "#0a0", dark, "magenta", dark, "#0ff"];
+
+
 var names = [  "C", "C#", "D", "Eb", "E", "F",
                "F#", "G", "Ab", "A", "Bb", "B"];
+
+var hues = [  240, 120, 0, 190, 60, 30,
+              0, 120, 330, 300, 270, 180];
+
+
+// 90
+// 150
+// 270
+// 330
+
+var lights = [ 0.5, 0.25, 0.5, 0.25, 0.5, 0.5,
+               0.25, 0.5, 0.25, 0.5, 0.25, 0.5];
+
 var PIXEL = 1 / devicePixelRatio;
 var playIntervalMs = 50;
 
-var fadedColors = colors.map(function(color) {
-  return tinycolor.mix(color, "#999", 80).toHexString();
+var fadedColors = _.map(colors, function(color, ix) {
+  console.log(ix);
+  return tinycolor({h: hues[ix % 12], s: 0.1, l: lights[ix%12] / 2 });
+});
+
+var colors = _.map(colors, function(color, ix) {
+  console.log(ix);
+  return tinycolor({h: hues[ix % 12], s: 0.7, l: lights[ix%12]+0.25 });
 });
 
 LEFT_MARGIN = 30;
@@ -19,20 +40,23 @@ var state = {
     beatsPerBar: 32,
   },
   playhead: 0, // in beats
-  pitchWindow: {start: 48, len: 24},
+  pitchWindow: {start: 36, len: 36},
  }
 
 for (var i = 0; i < 32; i++) {
   var pitch;
-  var arpeg = [73, 59, 63, 66];
+  var arpeg = [71, 60, 64, 67];
   if (i < 16) {
-    pitch = arpeg[i % 4] - 6
+    pitch = arpeg[i % 4]
   }
   else {
     pitch = arpeg[i % 4] - 5
   }
-  state.song.notes.push({start: i , len: i % 3 ? 1/8 : 2, pitch: pitch});
+  state.song.notes.push({start: i , len: i % 3 ? 1/4 : 1, pitch: pitch, inst: i % 3 ? "lead" : "midi"});
 }
+
+state.song.notes.push({start: 0 , len: 16, pitch: 60 - 12, inst: "midi"});
+state.song.notes.push({start: 16 , len: 16, pitch: 60 - 12 - 5, inst: "midi"});
 
 $(go);
 
@@ -143,8 +167,8 @@ function render(state) {
     var p = note.pitch - state.pitchWindow.start;
 
     d.fillStyle = colors[pitchClass];
-    if (playhead >= note.start && playhead <= note.start + note.len + 1)
-      d.fillStyle = "white";
+    if (state.playing && playhead >= note.start && playhead <= note.start + note.len + 1)
+      d.fillStyle = "yellow";
     d.fillRect(Math.floor(LEFT_MARGIN + note.start * h_scale),
                Math.floor(h - (p + 1) * v_scale),
                Math.floor(LEFT_MARGIN + (note.start + note.len) * h_scale) -
@@ -191,7 +215,7 @@ function getAgenda(data) {
                   args: {
                     on: true,
                     id: id_odom,
-                    ugenName: "midi",
+                    ugenName: note.inst || "midi",
                     vel: 10,
                     pitch: note.pitch,
                   }}]);
@@ -215,7 +239,7 @@ function stopPlayback(state) {
 function startPlayback(state) {
   var agenda = getAgenda(state.song)
   state.playing = true;
-  var beatSamples = 0.25 * 44100;
+  var beatSamples = 0.2 * 44100;
   var cur_time;
   var i = 0; // position in agenda
   var start_time = 0; // samples
