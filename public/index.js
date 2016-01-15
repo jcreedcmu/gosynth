@@ -36,20 +36,9 @@ var state = {
   pitchWindow: {start: 36, len: 36},
  }
 
-for (var i = 0; i < 32; i++) {
-  var pitch;
-  var arpeg = [71, 60, 64, 67];
-  if (i < 16) {
-    pitch = arpeg[i % 4]
-  }
-  else {
-    pitch = arpeg[i % 4] - 5
-  }
-  state.song.notes.push({start: i , len: i % 3 ? 1/4 : 1, pitch: pitch, inst: i % 3 ? "lead" : "midi"});
+function addNote(state, note) {
+  state.song.notes.push(note);
 }
-
-state.song.notes.push({start: 0 , len: 16, pitch: 60 - 12, inst: "midi"});
-state.song.notes.push({start: 16 , len: 16, pitch: 60 - 12 - 5, inst: "midi"});
 
 $(go);
 
@@ -176,16 +165,12 @@ function render(state) {
   for (var i = 0; i < song.notes.length; i++) {
     var note = song.notes[i];
     var pitchClass = note.pitch % 12;
-    var p = note.pitch - state.pitchWindow.start;
 
     d.fillStyle = colors[pitchClass];
     if (state.playing && playhead >= note.start && playhead <= note.start + note.len + 1)
       d.fillStyle = "yellow";
-    d.fillRect(Math.floor(sc.LEFT_MARGIN + note.start * sc.beat_w),
-               Math.floor(h - (p + 1) * sc.pitch_h),
-               Math.floor(sc.LEFT_MARGIN + (note.start + note.len) * sc.beat_w) -
-               Math.floor(sc.LEFT_MARGIN + note.start * sc.beat_w),
-               Math.floor(h - (p) * sc.pitch_h) - Math.floor(h - (p + 1) * sc.pitch_h));
+    var r = noteToRect(sc, state.pitchWindow, note);
+    d.fillRect.apply(d, r);
   }
 
   // grid
@@ -209,6 +194,18 @@ function render(state) {
     d.strokeStyle = "white";
     d.lineWidth = PIXEL;
     d.stroke();
+  }
+
+  // cursor
+  if (state.mouseNote) {
+    var m = state.mouseNote;
+    console.log(m);
+    d.save();
+    d.strokeStyle = "white";
+    d.lineWidth = 3 * PIXEL;
+    var r = noteToRect(sc, state.pitchWindow, m)
+    d.strokeRect.apply(d, r);
+    d.restore();
   }
   d.restore();
 }
@@ -285,12 +282,50 @@ function startPlayback(state) {
 }
 
 function canvasMousedown(e) {
-  console.log(e);
+  var parentOffset = $(this).offset();
+  var sc = get_scale(state);
+  var relX = e.pageX - parentOffset.left;
+  var relY = e.pageY - parentOffset.top;
+  var mouseNote = {start: xToBeat(sc, relX),
+                   len: 1,
+                   pitch: yToPitch(sc, state.pitchWindow, relY),
+                   inst: "midi",
+                  };
+  addNote(state, mouseNote);
+  render(state);
 }
 
 function canvasMousemove(e) {
   var parentOffset = $(this).offset();
+  var sc = get_scale(state);
   var relX = e.pageX - parentOffset.left;
   var relY = e.pageY - parentOffset.top;
-  console.log(relX, relY);
+  var mouseNote = {start: xToBeat(sc, relX),
+                   len: 1,
+                   pitch: yToPitch(sc, state.pitchWindow, relY),
+                  };
+  if (!state.mouseNote ||
+      state.mouseNote.start != mouseNote.start ||
+      state.mouseNote.pitch != mouseNote.pitch) {
+    state.mouseNote = mouseNote;
+    render(state);
+  }
+}
+
+function yToPitch(scale, pitchWindow, y) {
+  return pitchWindow.len + pitchWindow.start - 1 - Math.floor(y / scale.pitch_h);
+}
+
+function xToBeat(scale, x) { // probably want to include a scroll term here too
+  return Math.floor((x - scale.LEFT_MARGIN) / scale.beat_w);
+}
+
+// returns [x, y, w, h] suitable for fillrect or strokerect
+function noteToRect(scale, pitchWindow, note) {
+  var p = note.pitch - pitchWindow.start;
+  return [Math.floor(scale.LEFT_MARGIN + note.start * scale.beat_w),
+          Math.floor(scale.h - (p + 1) * scale.pitch_h),
+          Math.floor(scale.LEFT_MARGIN + (note.start + note.len) * scale.beat_w) -
+          Math.floor(scale.LEFT_MARGIN + note.start * scale.beat_w),
+          Math.floor(scale.h - (p) * scale.pitch_h) - Math.floor(scale.h - (p + 1) * scale.pitch_h)];
 }
