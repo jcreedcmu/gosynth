@@ -10,11 +10,6 @@ var hues = [  240, 120, 0, 190, 60, 30,
               0, 120, 330, 300, 270, 180];
 
 
-// 90
-// 150
-// 270
-// 330
-
 var lights = [ 0.5, 0.25, 0.5, 0.25, 0.5, 0.5,
                0.25, 0.5, 0.25, 0.5, 0.25, 0.5];
 
@@ -30,8 +25,6 @@ var colors = _.map(colors, function(color, ix) {
   console.log(ix);
   return tinycolor({h: hues[ix % 12], s: 0.7, l: lights[ix%12]+0.25 });
 });
-
-LEFT_MARGIN = 30;
 
 var state = {
   song: {
@@ -126,36 +119,55 @@ function go() {
     startPlayback(state);
   });
 
+  $("#c").on("mousedown", canvasMousedown);
+  $("#c").on("mousemove", canvasMousemove);
+
+  render_size(state);
   render(state);
 }
 
+function get_scale(state) {
+  var w = 1000;
+  var h = 500;
+  var LEFT_MARGIN = 30;
+  return {
+    w: w,
+    h: h,
+    LEFT_MARGIN: LEFT_MARGIN,
+    beat_w: (w - LEFT_MARGIN) / state.song.beatsPerBar,
+    pitch_h: h / state.pitchWindow.len,
+  };
+}
 // playhead in beats
+function render_size(state) {
+  var sc = get_scale(state);
+  c.width = sc.w * devicePixelRatio;;
+  c.height = sc.h * devicePixelRatio;
+  c.style.width = sc.w + "px";
+  c.style.height = sc.h + "px";
+}
+
 function render(state) {
   var song = state.song;
   var playhead = state.playhead;
   var c = $("#c")[0];
   var d = c.getContext('2d');
-  var w, h;
-  c.width = (w = 1000) * devicePixelRatio;;
-  c.height = (h = 500) * devicePixelRatio;
-  c.style.width = w + "px";
-  c.style.height = h + "px";
+
   d.save();
   d.scale(devicePixelRatio, devicePixelRatio);
-
-  var h_scale = (w - LEFT_MARGIN) / song.beatsPerBar;
-  var v_scale = h / state.pitchWindow.len;
+  var sc = get_scale(state);
+  var w = sc.w, h = sc.h;
 
   // background
   for (var p = 0; p < state.pitchWindow.len; p++) {
     var pitchClass = (p + state.pitchWindow.start) % 12;
     d.save();
     d.fillStyle = fadedColors[pitchClass];
-    d.fillRect(0, Math.floor(h - (p + 1) * v_scale), w,
-               Math.floor(h - (p) * v_scale) - Math.floor(h - (p + 1) * v_scale));
+    d.fillRect(0, Math.floor(h - (p + 1) * sc.pitch_h), w,
+               Math.floor(h - (p) * sc.pitch_h) - Math.floor(h - (p + 1) * sc.pitch_h));
     d.fillStyle = "white"
     d.globalAlpha = 0.5
-    d.fillText(names[pitchClass], 10, Math.floor(h - (p + 0.35) * v_scale));
+    d.fillText(names[pitchClass], 10, Math.floor(h - (p + 0.35) * sc.pitch_h));
     d.restore();
 
   }
@@ -169,17 +181,17 @@ function render(state) {
     d.fillStyle = colors[pitchClass];
     if (state.playing && playhead >= note.start && playhead <= note.start + note.len + 1)
       d.fillStyle = "yellow";
-    d.fillRect(Math.floor(LEFT_MARGIN + note.start * h_scale),
-               Math.floor(h - (p + 1) * v_scale),
-               Math.floor(LEFT_MARGIN + (note.start + note.len) * h_scale) -
-               Math.floor(LEFT_MARGIN + note.start * h_scale),
-               Math.floor(h - (p) * v_scale) - Math.floor(h - (p + 1) * v_scale));
+    d.fillRect(Math.floor(sc.LEFT_MARGIN + note.start * sc.beat_w),
+               Math.floor(h - (p + 1) * sc.pitch_h),
+               Math.floor(sc.LEFT_MARGIN + (note.start + note.len) * sc.beat_w) -
+               Math.floor(sc.LEFT_MARGIN + note.start * sc.beat_w),
+               Math.floor(h - (p) * sc.pitch_h) - Math.floor(h - (p + 1) * sc.pitch_h));
   }
 
   // grid
   for (var i = 0; i < song.beatsPerBar; i++) {
     var width = i % 8 == 0 ? 5 : i % 4 == 0 ? 3 : i % 2 == 0 ? 2 : 1
-    var xpos = Math.floor(LEFT_MARGIN + i * h_scale) + width * PIXEL / 2;
+    var xpos = Math.floor(sc.LEFT_MARGIN + i * sc.beat_w) + width * PIXEL / 2;
     d.beginPath();
     d.moveTo(xpos,0);
     d.lineTo(xpos, h);
@@ -190,7 +202,7 @@ function render(state) {
 
   // playhead
   if (state.playing && playhead != null) {
-    var xpos = Math.floor(LEFT_MARGIN + playhead * h_scale) + PIXEL / 2;
+    var xpos = Math.floor(sc.LEFT_MARGIN + playhead * sc.beat_w) + PIXEL / 2;
     d.beginPath();
     d.moveTo(xpos,0);
     d.lineTo(xpos, h);
@@ -270,4 +282,15 @@ function startPlayback(state) {
       start_time = data.time + 10000; // leave a little gap here to be sure we can start playing on time
       play_a_bit();
     })
+}
+
+function canvasMousedown(e) {
+  console.log(e);
+}
+
+function canvasMousemove(e) {
+  var parentOffset = $(this).offset();
+  var relX = e.pageX - parentOffset.left;
+  var relY = e.pageY - parentOffset.top;
+  console.log(relX, relY);
 }
