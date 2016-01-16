@@ -26,7 +26,7 @@ var colors = _.map(colors, function(color, ix) {
   return tinycolor({h: hues[ix % 12], s: 0.7, l: lights[ix%12]+0.25 });
 });
 
-var state = {
+var state = new Root({
   song: {
     notes: [
     ],
@@ -34,11 +34,35 @@ var state = {
   },
   playhead: 0, // in beats
   pitchWindow: {start: 36, len: 36},
- }
+});
 
-function addNote(state, note) {
-  state.song.notes.push(note);
+state.stopPlayback = function() {
+  rem.send("halt", {});
+  this.val().playing = false;
+  this.invalidate();
+  render(state);
 }
+
+state.addNote = function(note) {
+  this.val().song.notes.push(note);
+  this.invalidate();
+}
+
+var scale = new Cell(function(get) {
+  console.log(state.val());
+  var st = get(state);
+
+  var w = 1000;
+  var h = 500;
+  var LEFT_MARGIN = 30;
+  return {
+    w: w,
+    h: h,
+    LEFT_MARGIN: LEFT_MARGIN,
+    beat_w: (w - LEFT_MARGIN) / st.song.beatsPerBar,
+    pitch_h: h / st.pitchWindow.len,
+  };
+});
 
 $(go);
 
@@ -102,7 +126,7 @@ function go() {
   });
 
   $("#stop").on("click", function() {
-    stopPlayback(state);
+    state.stopPlayback();
   });
   $("#play").on("click", function() {
     startPlayback(state);
@@ -115,21 +139,11 @@ function go() {
   render(state);
 }
 
-function get_scale(state) {
-  var w = 1000;
-  var h = 500;
-  var LEFT_MARGIN = 30;
-  return {
-    w: w,
-    h: h,
-    LEFT_MARGIN: LEFT_MARGIN,
-    beat_w: (w - LEFT_MARGIN) / state.song.beatsPerBar,
-    pitch_h: h / state.pitchWindow.len,
-  };
-}
+
+
 // playhead in beats
 function render_size(state) {
-  var sc = get_scale(state);
+  var sc = scale.val();
   c.width = sc.w * devicePixelRatio;;
   c.height = sc.h * devicePixelRatio;
   c.style.width = sc.w + "px";
@@ -137,19 +151,20 @@ function render_size(state) {
 }
 
 function render(state) {
-  var song = state.song;
-  var playhead = state.playhead;
+  st = state.val();
+  var song = st.song;
+  var playhead = st.playhead;
   var c = $("#c")[0];
   var d = c.getContext('2d');
 
   d.save();
   d.scale(devicePixelRatio, devicePixelRatio);
-  var sc = get_scale(state);
+  var sc = scale.val();
   var w = sc.w, h = sc.h;
 
   // background
-  for (var p = 0; p < state.pitchWindow.len; p++) {
-    var pitchClass = (p + state.pitchWindow.start) % 12;
+  for (var p = 0; p < st.pitchWindow.len; p++) {
+    var pitchClass = (p + st.pitchWindow.start) % 12;
     d.save();
     d.fillStyle = fadedColors[pitchClass];
     d.fillRect(0, Math.floor(h - (p + 1) * sc.pitch_h), w,
@@ -167,9 +182,9 @@ function render(state) {
     var pitchClass = note.pitch % 12;
 
     d.fillStyle = colors[pitchClass];
-    if (state.playing && playhead >= note.start && playhead <= note.start + note.len + 1)
+    if (st.playing && playhead >= note.start && playhead <= note.start + note.len + 1)
       d.fillStyle = "yellow";
-    var r = noteToRect(sc, state.pitchWindow, note);
+    var r = noteToRect(sc, st.pitchWindow, note);
     d.fillRect.apply(d, r);
   }
 
@@ -186,7 +201,7 @@ function render(state) {
   }
 
   // playhead
-  if (state.playing && playhead != null) {
+  if (st.playing && playhead != null) {
     var xpos = Math.floor(sc.LEFT_MARGIN + playhead * sc.beat_w) + PIXEL / 2;
     d.beginPath();
     d.moveTo(xpos,0);
@@ -197,13 +212,13 @@ function render(state) {
   }
 
   // cursor
-  if (state.mouseNote) {
-    var m = state.mouseNote;
+  if (st.mouseNote) {
+    var m = st.mouseNote;
     console.log(m);
     d.save();
     d.strokeStyle = "white";
     d.lineWidth = 3 * PIXEL;
-    var r = noteToRect(sc, state.pitchWindow, m)
+    var r = noteToRect(sc, st.pitchWindow, m)
     d.strokeRect.apply(d, r);
     d.restore();
   }
@@ -239,15 +254,11 @@ function getAgenda(data) {
   return _.sortBy(agenda, function(x) { return x[0]; });
 }
 
-function stopPlayback(state) {
-  rem.send("halt", {});
-  state.playing = false;
-  render(state);
-}
 
 function startPlayback(state) {
-  var agenda = getAgenda(state.song)
-  state.playing = true;
+  var st = state.val();
+  var agenda = getAgenda(st.song)
+  st.playing = true;
   var beatSamples = 0.2 * 44100;
   var cur_time;
   var i = 0; // position in agenda
@@ -256,7 +267,7 @@ function startPlayback(state) {
   function play_a_bit() {
     var cmds = [];
     if (i >= agenda.length) {
-      state.playing = false;
+      st.playing = false;
       render(state);
       return;
     }
@@ -266,11 +277,11 @@ function startPlayback(state) {
     }
     rem.send("schedule", {cmds: cmds}, function(data) {
       cur_time = data.time;
-      state.playhead = (cur_time - start_time) / beatSamples;
+      st.playhead = (cur_time - start_time) / beatSamples;
       render(state);
     })
     setTimeout(function() {
-      if (state.playing) play_a_bit();
+      if (st.playing) play_a_bit();
     }, playIntervalMs);
   }
   rem.send(
@@ -282,32 +293,34 @@ function startPlayback(state) {
 }
 
 function canvasMousedown(e) {
+  var st = state.val();
+  var sc = scale.val();
   var parentOffset = $(this).offset();
-  var sc = get_scale(state);
   var relX = e.pageX - parentOffset.left;
   var relY = e.pageY - parentOffset.top;
   var mouseNote = {start: xToBeat(sc, relX),
                    len: 1,
-                   pitch: yToPitch(sc, state.pitchWindow, relY),
+                   pitch: yToPitch(sc, st.pitchWindow, relY),
                    inst: "midi",
                   };
-  addNote(state, mouseNote);
+  state.addNote(mouseNote);
   render(state);
 }
 
 function canvasMousemove(e) {
+  var st = state.val();
+  var sc = scale.val();
   var parentOffset = $(this).offset();
-  var sc = get_scale(state);
   var relX = e.pageX - parentOffset.left;
   var relY = e.pageY - parentOffset.top;
   var mouseNote = {start: xToBeat(sc, relX),
                    len: 1,
-                   pitch: yToPitch(sc, state.pitchWindow, relY),
+                   pitch: yToPitch(sc, st.pitchWindow, relY),
                   };
-  if (!state.mouseNote ||
-      state.mouseNote.start != mouseNote.start ||
-      state.mouseNote.pitch != mouseNote.pitch) {
-    state.mouseNote = mouseNote;
+  if (!st.mouseNote ||
+      st.mouseNote.start != mouseNote.start ||
+      st.mouseNote.pitch != mouseNote.pitch) {
+    st.mouseNote = mouseNote;
     render(state);
   }
 }
