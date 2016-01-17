@@ -27,11 +27,12 @@ var colors = _.map(colors, function(color, ix) {
   return tinycolor({h: hues[ix % 12], s: 0.7, l: lights[ix%12]+0.25 });
 });
 
+var pachelbel = [{"start":0,"len":1,"pitch":48,"inst":"lead","id":7},{"start":3,"len":1,"pitch":48,"inst":"lead","id":8},{"start":4,"len":1,"pitch":43,"inst":"lead","id":9},{"start":7,"len":1,"pitch":43,"inst":"lead","id":10},{"start":8,"len":1,"pitch":45,"inst":"lead","id":11},{"start":11,"len":1,"pitch":45,"inst":"lead","id":12},{"start":12,"len":1,"pitch":40,"inst":"lead","id":14},{"start":15,"len":1,"pitch":40,"inst":"lead","id":15},{"start":16,"len":1,"pitch":41,"inst":"lead","id":16},{"start":19,"len":1,"pitch":41,"inst":"lead","id":17},{"start":20,"len":1,"pitch":36,"inst":"lead","id":18},{"start":23,"len":1,"pitch":36,"inst":"lead","id":19},{"start":24,"len":1,"pitch":41,"inst":"lead","id":20},{"start":27,"len":1,"pitch":41,"inst":"lead","id":21},{"start":28,"len":1,"pitch":43,"inst":"lead","id":22},{"start":31,"len":1,"pitch":43,"inst":"lead","id":23},{"start":1,"len":1,"pitch":60,"inst":"lead","id":0},{"start":2,"len":1,"pitch":64,"inst":"lead","id":1},{"start":2,"len":1,"pitch":67,"inst":"lead","id":3},{"start":5,"len":1,"pitch":55,"inst":"lead","id":4},{"start":6,"len":1,"pitch":59,"inst":"lead","id":5},{"start":6,"len":1,"pitch":62,"inst":"lead","id":6},{"start":9,"len":1,"pitch":57,"inst":"lead","id":7},{"start":10,"len":1,"pitch":60,"inst":"lead","id":8},{"start":10,"len":1,"pitch":64,"inst":"lead","id":9},{"start":13,"len":1,"pitch":52,"inst":"lead","id":10},{"start":14,"len":1,"pitch":55,"inst":"lead","id":11},{"start":14,"len":1,"pitch":59,"inst":"lead","id":12},{"start":17,"len":1,"pitch":53,"inst":"lead","id":13},{"start":18,"len":1,"pitch":57,"inst":"lead","id":14},{"start":18,"len":1,"pitch":60,"inst":"lead","id":15},{"start":21,"len":1,"pitch":48,"inst":"lead","id":16},{"start":22,"len":1,"pitch":52,"inst":"lead","id":17},{"start":22,"len":1,"pitch":55,"inst":"lead","id":18},{"start":25,"len":1,"pitch":53,"inst":"lead","id":19},{"start":26,"len":1,"pitch":57,"inst":"lead","id":20},{"start":26,"len":1,"pitch":60,"inst":"lead","id":21},{"start":29,"len":1,"pitch":55,"inst":"lead","id":22},{"start":30,"len":1,"pitch":59,"inst":"lead","id":23},{"start":30,"len":1,"pitch":62,"inst":"lead","id":24}];
+
 var state = new Root({
   song: {
-    notes: [
-    ],
-    tempo: 0.2, // duration of a beat in seconds
+    notes: sanitize_ids(pachelbel),
+    tempo: 0.3, // duration of a beat in seconds
     beatsPerBar: 32,
   },
   playhead: 0, // in beats
@@ -46,11 +47,34 @@ state.stopPlayback = function() {
 }
 
 var id_odom = 0;
+function sanitize_ids(notes) {
+  id_odom = 0;
+  for (var i = 0; i < notes.length; i++) {
+    console.log(id_odom);
+    notes[i].id = id_odom++;
+  }
+  return notes;
+}
+
 state.addNote = function(note) {
   note.id = id_odom++;
   this.val().song.notes.push(note);
   this.invalidate();
   render(state);
+}
+
+state.toggleNote = function(note) {
+  var song = this.val().song;
+  var existing = _.find(song.notes, function(x) {
+    return x.start == note.start && x.pitch == note.pitch });
+  if (existing) {
+    song.notes = _.without(song.notes, existing);
+    this.invalidate();
+    render(state);
+  }
+  else {
+    this.addNote(note);
+  }
 }
 
 state.setMouseNote = function(mn) {
@@ -252,7 +276,6 @@ function getEventsInTimeRange(song, start, len, offset) {
     var song_samples = note.time_beats * beatSamples;
     if (song_samples >= start && song_samples < start+len) {
       var item = {time: song_samples + offset, cmd: note.cmd};
-      console.log(song_samples, start, len, offset, JSON.stringify(item));
       agenda.push(item);
     }
   };
@@ -341,7 +364,7 @@ function canvasMousedown(e) {
                    pitch: yToPitch(sc, st.pitchWindow, relY),
                    inst: "lead",
                   };
-  state.addNote(mouseNote);
+  state.toggleNote(mouseNote);
 }
 
 function canvasMousemove(e) {
