@@ -1,3 +1,5 @@
+Math.fmod = function (a,b) { return a - (Math.floor(a / b) * b); };
+
 var sampleRate = 44100;
 var dark = "#444";
 var colors = [  "#00f", dark, "red", dark, "yellow", "orange",
@@ -18,12 +20,10 @@ var PIXEL = 1 / devicePixelRatio;
 var playIntervalMs = 50;
 
 var fadedColors = _.map(colors, function(color, ix) {
-  console.log(ix);
   return tinycolor({h: hues[ix % 12], s: 0.1, l: lights[ix%12] / 2 });
 });
 
 var colors = _.map(colors, function(color, ix) {
-  console.log(ix);
   return tinycolor({h: hues[ix % 12], s: 0.7, l: lights[ix%12]+0.25 });
 });
 
@@ -60,7 +60,6 @@ state.setMouseNote = function(mn) {
 }
 
 var scale = new Cell(function(get) {
-  console.log(state.val());
   var st = get(state);
 
   var w = 1000;
@@ -124,7 +123,7 @@ function go() {
     rem.send("note", {
       on: true,
       id: id,
-      ugenName: "midi",
+      ugenName: "lead",
       vel: 10,
       pitch: Math.floor(Math.random() * 48 + 45),
     });
@@ -252,27 +251,41 @@ function getEventsInTimeRange(song, start, len, offset) {
   function maybe_add(note) {
     var song_samples = note.time_beats * beatSamples;
     if (song_samples >= start && song_samples < start+len) {
-      agenda.push({time: song_samples + offset, cmd: note.cmd});
+      var item = {time: song_samples + offset, cmd: note.cmd};
+      console.log(song_samples, start, len, offset, JSON.stringify(item));
+      agenda.push(item);
     }
   };
-  song.notes.forEach(function(note) {
-    maybe_add({time_beats: note.start,
-               cmd: {action: "note",
-                     args: {
-                       on: true,
-                       id: note.id,
-                       ugenName: note.inst || "midi",
-                       vel: 10,
-                       pitch: note.pitch,
-                     }}});
-    maybe_add({time_beats: note.start + note.len,
-               cmd: {action: "note",
-                     args: {
-                       on: false,
-                       id: note.id,
-                     }}});
-  });
-  return _.sortBy(agenda, function(x) { return x[0]; });
+  function add_loop(at) {
+    song.notes.forEach(function(note) {
+      maybe_add({time_beats: at + note.start,
+                 cmd: {action: "note",
+                       args: {
+                         on: true,
+                         id: note.id,
+                         ugenName: note.inst || "lead2",
+                         vel: 10,
+                         pitch: note.pitch,
+                       }}});
+      maybe_add({time_beats: at + note.start + note.len,
+                 cmd: {action: "note",
+                       args: {
+                         on: false,
+                         id: note.id,
+                       }}});
+    });
+  }
+
+  // We're going to render to loop iterations to make sure we cover
+  // the query interval. This should be pretty robust as long as the
+  // query interval is much smaller than one loop iteration.
+
+  // The beginning of the earlier of the two iterations we render:
+  var beat_pos = start / (sampleRate * song.tempo);
+  var earlier = (Math.round(beat_pos / song.beatsPerBar) - 1) * song.beatsPerBar;
+  add_loop(earlier);
+  add_loop(earlier + song.beatsPerBar);
+  return agenda;
 }
 
 function startPlayback(state) {
@@ -293,14 +306,14 @@ function startPlayback(state) {
     var cmds = getEventsInTimeRange(
       st.song,
       watermark,
-      cur_time - start_time + 10000,
+      cur_time - start_time - watermark + 10000,
       start_time
     );
     watermark = cur_time - start_time + 10000;
 
     rem.send("schedule", {cmds: cmds}, function(data) {
       cur_time = data.time;
-      st.playhead = (cur_time - start_time) / beatSamples;
+      st.playhead = Math.fmod((cur_time - start_time) / beatSamples, st.song.beatsPerBar);
       render(state);
     })
 
@@ -326,7 +339,7 @@ function canvasMousedown(e) {
   var mouseNote = {start: xToBeat(sc, relX),
                    len: 1,
                    pitch: yToPitch(sc, st.pitchWindow, relY),
-                   inst: "midi",
+                   inst: "lead",
                   };
   state.addNote(mouseNote);
 }
