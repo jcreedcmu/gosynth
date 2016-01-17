@@ -1,3 +1,4 @@
+var sampleRate = 44100;
 var dark = "#444";
 var colors = [  "#00f", dark, "red", dark, "yellow", "orange",
                 dark, "#0a0", dark, "magenta", dark, "#0ff"];
@@ -30,6 +31,7 @@ var state = new Root({
   song: {
     notes: [
     ],
+    tempo: 0.2, // duration of a beat in seconds
     beatsPerBar: 32,
   },
   playhead: 0, // in beats
@@ -43,9 +45,18 @@ state.stopPlayback = function() {
   render(state);
 }
 
+var id_odom = 0;
 state.addNote = function(note) {
+  note.id = id_odom++;
   this.val().song.notes.push(note);
   this.invalidate();
+  render(state);
+}
+
+state.setMouseNote = function(mn) {
+  this.val().mouseNote = mn;
+  this.invalidate();
+  render(state);
 }
 
 var scale = new Cell(function(get) {
@@ -214,7 +225,6 @@ function render(state) {
   // cursor
   if (st.mouseNote) {
     var m = st.mouseNote;
-    console.log(m);
     d.save();
     d.strokeStyle = "white";
     d.lineWidth = 3 * PIXEL;
@@ -230,56 +240,70 @@ function beatsPerBar(data) {
 }
 
 function getAgenda(data) {
-  var id_odom = 0;
-  var agenda = [];
+}
 
-  data.notes.forEach(function(note) {
-    agenda.push([note.start,
-                 {action: "note",
-                  args: {
-                    on: true,
-                    id: id_odom,
-                    ugenName: note.inst || "midi",
-                    vel: 10,
-                    pitch: note.pitch,
-                  }}]);
-    agenda.push([note.start + note.len,
-                 {action: "note",
-                  args: {
-                    on: false,
-                    id: id_odom,
-                  }}]);
-    id_odom++;
+// start : samples as measured from start of the song
+// len : samples (the start+len interval is closed left, open right)
+// offset : number of samples to add to ever event, in practice it's
+// going to be a server time of the start of the song
+function getEventsInTimeRange(song, start, len, offset) {
+  var agenda = [];
+  var beatSamples = song.tempo * sampleRate;
+  function maybe_add(note) {
+    var song_samples = note.time_beats * beatSamples;
+    if (song_samples >= start && song_samples < start+len) {
+      agenda.push({time: song_samples + offset, cmd: note.cmd});
+    }
+  };
+  song.notes.forEach(function(note) {
+    maybe_add({time_beats: note.start,
+               cmd: {action: "note",
+                     args: {
+                       on: true,
+                       id: note.id,
+                       ugenName: note.inst || "midi",
+                       vel: 10,
+                       pitch: note.pitch,
+                     }}});
+    maybe_add({time_beats: note.start + note.len,
+               cmd: {action: "note",
+                     args: {
+                       on: false,
+                       id: note.id,
+                     }}});
   });
   return _.sortBy(agenda, function(x) { return x[0]; });
 }
 
-
 function startPlayback(state) {
   var st = state.val();
-  var agenda = getAgenda(st.song)
+  var beatSamples = st.song.tempo * sampleRate;
   st.playing = true;
-  var beatSamples = 0.2 * 44100;
-  var cur_time;
+  var cur_time; // server samples
   var i = 0; // position in agenda
-  var start_time = 0; // samples
+  var start_time = 0; // server samples
 
+  // we have already scheduled events up to (not including) this many
+  // samples from the start of the song
+  var watermark = 0;
+
+  // send to the backend all the events we haven't sent yet, up to
+  // 10,000 samples from now.
   function play_a_bit() {
-    var cmds = [];
-    if (i >= agenda.length) {
-      st.playing = false;
-      render(state);
-      return;
-    }
-    for (; i < agenda.length && start_time + agenda[i][0] * beatSamples < cur_time + 10000; i++) {
-      cmds.push({time: Math.floor(start_time + agenda[i][0] * beatSamples),
-                  cmd: agenda[i][1]});
-    }
+    var cmds = getEventsInTimeRange(
+      st.song,
+      watermark,
+      cur_time - start_time + 10000,
+      start_time
+    );
+    watermark = cur_time - start_time + 10000;
+
     rem.send("schedule", {cmds: cmds}, function(data) {
       cur_time = data.time;
       st.playhead = (cur_time - start_time) / beatSamples;
       render(state);
     })
+
     setTimeout(function() {
       if (st.playing) play_a_bit();
     }, playIntervalMs);
@@ -287,7 +311,8 @@ function startPlayback(state) {
   rem.send(
     "schedule", {},
     function(data) {
-      start_time = data.time + 10000; // leave a little gap here to be sure we can start playing on time
+      cur_time = data.time;
+      start_time = data.time + 5000; // leave a little gap here to be sure we can start playing on time
       play_a_bit();
     })
 }
@@ -304,7 +329,6 @@ function canvasMousedown(e) {
                    inst: "midi",
                   };
   state.addNote(mouseNote);
-  render(state);
 }
 
 function canvasMousemove(e) {
@@ -320,8 +344,7 @@ function canvasMousemove(e) {
   if (!st.mouseNote ||
       st.mouseNote.start != mouseNote.start ||
       st.mouseNote.pitch != mouseNote.pitch) {
-    st.mouseNote = mouseNote;
-    render(state);
+    state.setMouseNote(mouseNote);
   }
 }
 
