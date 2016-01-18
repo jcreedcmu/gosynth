@@ -27,12 +27,12 @@ var colors = _.map(colors, function(color, ix) {
   return tinycolor({h: hues[ix % 12], s: 0.7, l: lights[ix%12]+0.25 });
 });
 
-var pachelbel = [{"start":0,"len":1,"pitch":48,"inst":"lead","id":7},{"start":3,"len":1,"pitch":48,"inst":"lead","id":8},{"start":4,"len":1,"pitch":43,"inst":"lead","id":9},{"start":7,"len":1,"pitch":43,"inst":"lead","id":10},{"start":8,"len":1,"pitch":45,"inst":"lead","id":11},{"start":11,"len":1,"pitch":45,"inst":"lead","id":12},{"start":12,"len":1,"pitch":40,"inst":"lead","id":14},{"start":15,"len":1,"pitch":40,"inst":"lead","id":15},{"start":16,"len":1,"pitch":41,"inst":"lead","id":16},{"start":19,"len":1,"pitch":41,"inst":"lead","id":17},{"start":20,"len":1,"pitch":36,"inst":"lead","id":18},{"start":23,"len":1,"pitch":36,"inst":"lead","id":19},{"start":24,"len":1,"pitch":41,"inst":"lead","id":20},{"start":27,"len":1,"pitch":41,"inst":"lead","id":21},{"start":28,"len":1,"pitch":43,"inst":"lead","id":22},{"start":31,"len":1,"pitch":43,"inst":"lead","id":23},{"start":1,"len":1,"pitch":60,"inst":"lead","id":0},{"start":2,"len":1,"pitch":64,"inst":"lead","id":1},{"start":2,"len":1,"pitch":67,"inst":"lead","id":3},{"start":5,"len":1,"pitch":55,"inst":"lead","id":4},{"start":6,"len":1,"pitch":59,"inst":"lead","id":5},{"start":6,"len":1,"pitch":62,"inst":"lead","id":6},{"start":9,"len":1,"pitch":57,"inst":"lead","id":7},{"start":10,"len":1,"pitch":60,"inst":"lead","id":8},{"start":10,"len":1,"pitch":64,"inst":"lead","id":9},{"start":13,"len":1,"pitch":52,"inst":"lead","id":10},{"start":14,"len":1,"pitch":55,"inst":"lead","id":11},{"start":14,"len":1,"pitch":59,"inst":"lead","id":12},{"start":17,"len":1,"pitch":53,"inst":"lead","id":13},{"start":18,"len":1,"pitch":57,"inst":"lead","id":14},{"start":18,"len":1,"pitch":60,"inst":"lead","id":15},{"start":21,"len":1,"pitch":48,"inst":"lead","id":16},{"start":22,"len":1,"pitch":52,"inst":"lead","id":17},{"start":22,"len":1,"pitch":55,"inst":"lead","id":18},{"start":25,"len":1,"pitch":53,"inst":"lead","id":19},{"start":26,"len":1,"pitch":57,"inst":"lead","id":20},{"start":26,"len":1,"pitch":60,"inst":"lead","id":21},{"start":29,"len":1,"pitch":55,"inst":"lead","id":22},{"start":30,"len":1,"pitch":59,"inst":"lead","id":23},{"start":30,"len":1,"pitch":62,"inst":"lead","id":24}];
+var beat = [{"start":0,"len":1,"pitch":36,"inst":"lead","id":0},{"start":4,"len":1,"pitch":37,"inst":"lead","id":1},{"start":8,"len":1,"pitch":36,"inst":"lead","id":2},{"start":12,"len":1,"pitch":37,"inst":"lead","id":3},{"start":16,"len":1,"pitch":36,"inst":"lead","id":4},{"start":20,"len":1,"pitch":37,"inst":"lead","id":5},{"start":28,"len":1,"pitch":37,"inst":"lead","id":8},{"start":22,"len":1,"pitch":36,"inst":"lead","id":9},{"start":26,"len":1,"pitch":36,"inst":"lead","id":10},{"start":0,"len":1,"pitch":60,"inst":"lead","id":11},{"start":4,"len":1,"pitch":60,"inst":"lead","id":12},{"start":8,"len":1,"pitch":60,"inst":"lead","id":13},{"start":11,"len":1,"pitch":60,"inst":"lead","id":14},{"start":14,"len":1,"pitch":60,"inst":"lead","id":15},{"start":16,"len":1,"pitch":55,"inst":"lead","id":21},{"start":19,"len":1,"pitch":55,"inst":"lead","id":22},{"start":22,"len":1,"pitch":55,"inst":"lead","id":23},{"start":25,"len":1,"pitch":58,"inst":"lead","id":30},{"start":28,"len":1,"pitch":58,"inst":"lead","id":31},{"start":30,"len":1,"pitch":58,"inst":"lead","id":32},{"start":0,"len":1,"pitch":48,"inst":"lead","id":33},{"start":16,"len":1,"pitch":43,"inst":"lead","id":35},{"start":25,"len":1,"pitch":46,"inst":"lead","id":38},{"start":30,"len":1,"pitch":46,"inst":"lead","id":40},{"start":29,"len":1,"pitch":46,"inst":"lead","id":41},{"start":24,"len":1,"pitch":46,"inst":"lead","id":42},{"start":23,"len":1,"pitch":55,"inst":"lead","id":43},{"start":31,"len":1,"pitch":58,"inst":"lead","id":44},{"start":4,"len":1,"pitch":52,"inst":"lead","id":45},{"start":8,"len":1,"pitch":53,"inst":"lead","id":47},{"start":11,"len":1,"pitch":52,"inst":"lead","id":48},{"start":14,"len":1,"pitch":50,"inst":"lead","id":49},{"start":7,"len":1,"pitch":37,"inst":"lead","id":60}];
 
 var state = new Root({
   song: {
-    notes: sanitize_ids(pachelbel),
-    tempo: 0.3, // duration of a beat in seconds
+    notes: sanitize_ids(beat),
+    tempo: 0.15, // duration of a beat in seconds
     beatsPerBar: 32,
   },
   playhead: 0, // in beats
@@ -262,9 +262,15 @@ function beatsPerBar(data) {
   return data.parts * data.beats;
 }
 
-function getAgenda(data) {
+function postProcessNoteOn(args) {
+  if (args.pitch == 36) {
+    args.ugenName = "bass";
+  }
+  if (args.pitch == 37) {
+    args.ugenName = "snare";
+  }
+  return args;
 }
-
 // start : samples as measured from start of the song
 // len : samples (the start+len interval is closed left, open right)
 // offset : number of samples to add to ever event, in practice it's
@@ -283,13 +289,13 @@ function getEventsInTimeRange(song, start, len, offset) {
     song.notes.forEach(function(note) {
       maybe_add({time_beats: at + note.start,
                  cmd: {action: "note",
-                       args: {
+                       args: postProcessNoteOn({
                          on: true,
                          id: note.id,
                          ugenName: note.inst || "lead2",
                          vel: 10,
                          pitch: note.pitch,
-                       }}});
+                       })}});
       maybe_add({time_beats: at + note.start + note.len,
                  cmd: {action: "note",
                        args: {

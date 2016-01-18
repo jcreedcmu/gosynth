@@ -21,11 +21,10 @@ int run(void *instance, double **param, int ix) {
   state_t *s = (state_t *)instance;
   s->ix = (s->ix + REVERB_LEN - 1) % REVERB_LEN;
   s->buf[s->ix] = *out
-    + tap(s, 2932) * 0.15
+    + tap(s, 2932) * 0.015
     + tap(s, 5053) * 0.025
     + tap(s, 4053) * 0.025
     + tap(s, 5043) * 0.0125
-    + tap(s, 25557) * 0.125
     + tap(s, 24) * 0.05
     ;
   *out = s->buf[s->ix];

@@ -74,7 +74,10 @@ int run(void *instance, double **param, int ix) {
   int kill = get_env(state, &env);
 
   if (!kill) {
-    *out += amp * (state->phase - 0.5) * env;
+    double s = (state->phase - 0.25);
+    if (state->phase > 0.5) s = 0;
+    *out += amp * s * env;
+
     state->phase += (freq / 44100.0);
     if (state->phase > 1) state->phase--;
   }
