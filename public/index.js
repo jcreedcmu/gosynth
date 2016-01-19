@@ -35,6 +35,7 @@ var state = new Root({
     tempo: 0.15, // duration of a beat in seconds
     beatsPerBar: 32,
   },
+  gridSize: 1, // in beats
   playhead: 0, // in beats
   pitchWindow: {start: 36, len: 36},
 });
@@ -141,23 +142,6 @@ function go() {
   }
   $("#res_freq").on("input", adjust);
   $("#q").on("input", adjust);
-
-  $("#note_on").on("click", function() {
-    var id = odom++;
-    rem.send("note", {
-      on: true,
-      id: id,
-      ugenName: "lead",
-      vel: 10,
-      pitch: Math.floor(Math.random() * 48 + 45),
-    });
-    setTimeout(function() {
-      rem.send("note", {
-        on: false,
-        id: id,
-      });
-    }, 1000);
-  });
 
   $("#stop").on("click", function() {
     state.stopPlayback();
@@ -279,7 +263,7 @@ function getEventsInTimeRange(song, start, len, offset) {
   var agenda = [];
   var beatSamples = song.tempo * sampleRate;
   function maybe_add(note) {
-    var song_samples = note.time_beats * beatSamples;
+    var song_samples = Math.floor(note.time_beats * beatSamples);
     if (song_samples >= start && song_samples < start+len) {
       var item = {time: song_samples + offset, cmd: note.cmd};
       agenda.push(item);
@@ -365,8 +349,8 @@ function canvasMousedown(e) {
   var parentOffset = $(this).offset();
   var relX = e.pageX - parentOffset.left;
   var relY = e.pageY - parentOffset.top;
-  var mouseNote = {start: xToBeat(sc, relX),
-                   len: 1,
+  var mouseNote = {start: xToBeat(sc, relX, st.gridSize),
+                   len: st.gridSize,
                    pitch: yToPitch(sc, st.pitchWindow, relY),
                    inst: "lead",
                   };
@@ -379,8 +363,8 @@ function canvasMousemove(e) {
   var parentOffset = $(this).offset();
   var relX = e.pageX - parentOffset.left;
   var relY = e.pageY - parentOffset.top;
-  var mouseNote = {start: xToBeat(sc, relX),
-                   len: 1,
+  var mouseNote = {start: xToBeat(sc, relX, st.gridSize),
+                   len: st.gridSize,
                    pitch: yToPitch(sc, st.pitchWindow, relY),
                   };
   if (!st.mouseNote ||
@@ -394,8 +378,8 @@ function yToPitch(scale, pitchWindow, y) {
   return pitchWindow.len + pitchWindow.start - 1 - Math.floor(y / scale.pitch_h);
 }
 
-function xToBeat(scale, x) { // probably want to include a scroll term here too
-  return Math.floor((x - scale.LEFT_MARGIN) / scale.beat_w);
+function xToBeat(scale, x, gridSize) { // probably want to include a scroll term here too
+  return Math.floor((x - scale.LEFT_MARGIN) / scale.beat_w / gridSize) * gridSize;
 }
 
 // returns [x, y, w, h] suitable for fillrect or strokerect
